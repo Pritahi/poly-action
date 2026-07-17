@@ -1,0 +1,2002 @@
+     1→<!DOCTYPE html>
+     2→<html lang="en">
+     3→<head>
+     4→<meta charset="UTF-8">
+     5→<meta name="viewport" content="width=device-width, initial-scale=1.0">
+     6→<title>Poly — Flaky Test Detection SaaS</title>
+     7→<style>
+     8→/* ============================================
+     9→   CSS CUSTOM PROPERTIES
+    10→   ============================================ */
+    11→:root {
+    12→  --bg-dark: #0a0a0c;
+    13→  --bg-board: #1a1611;
+    14→  --bg-surface: #12111a;
+    15→  --bg-card: #1c1a24;
+    16→  --border: #2a2836;
+    17→  --border-red: #5c2020;
+    18→  --text-primary: #e8e4df;
+    19→  --text-secondary: #8a8694;
+    20→  --text-dim: #5a5666;
+    21→  --red: #c94040;
+    22→  --red-glow: #ff444488;
+    23→  --amber: #d4a040;
+    24→  --amber-dim: #8b6914;
+    25→  --green: #3d9970;
+    26→  --blue: #4a8fd4;
+    27→  --purple: #7c5cbf;
+    28→  --mx: 50%;
+    29→  --my: 50%;
+    30→  --mono: 'Courier New', 'SF Mono', 'Fira Code', monospace;
+    31→  --sans: system-ui, -apple-system, sans-serif;
+    32→}
+    33→
+    34→/* ============================================
+    35→   RESET & BASE
+    36→   ============================================ */
+    37→*, *::before, *::after {
+    38→  margin: 0;
+    39→  padding: 0;
+    40→  box-sizing: border-box;
+    41→}
+    42→
+    43→html {
+    44→  scroll-behavior: smooth;
+    45→  -webkit-font-smoothing: antialiased;
+    46→  -moz-osx-font-smoothing: grayscale;
+    47→}
+    48→
+    49→body {
+    50→  background: var(--bg-dark);
+    51→  color: var(--text-primary);
+    52→  font-family: var(--sans);
+    53→  line-height: 1.6;
+    54→  overflow-x: hidden;
+    55→}
+    56→
+    57→a {
+    58→  color: var(--blue);
+    59→  text-decoration: none;
+    60→  transition: color 0.2s;
+    61→}
+    62→
+    63→a:hover {
+    64→  color: var(--amber);
+    65→}
+    66→
+    67→::selection {
+    68→  background: rgba(212, 160, 64, 0.3);
+    69→  color: var(--text-primary);
+    70→}
+    71→
+    72→/* ============================================
+    73→   ANIMATIONS KEYFRAMES
+    74→   ============================================ */
+    75→@keyframes fadeInUp {
+    76→  from { opacity: 0; transform: translateY(30px); }
+    77→  to { opacity: 1; transform: translateY(0); }
+    78→}
+    79→
+    80→@keyframes stampSlam {
+    81→  0% { transform: rotate(-8deg) scale(1.4); opacity: 0; }
+    82→  60% { transform: rotate(-8deg) scale(0.95); opacity: 1; }
+    83→  100% { transform: rotate(-8deg) scale(1); opacity: 1; }
+    84→}
+    85→
+    86→@keyframes pushpinBounce {
+    87→  0% { transform: translateY(-10px); }
+    88→  40% { transform: translateY(3px); }
+    89→  70% { transform: translateY(-2px); }
+    90→  100% { transform: translateY(0); }
+    91→}
+    92→
+    93→@keyframes drawLine {
+    94→  from { stroke-dashoffset: 500; }
+    95→  to { stroke-dashoffset: 0; }
+    96→}
+    97→
+    98→@keyframes gaugeFill {
+    99→  from { stroke-dashoffset: 440; }
+   100→  to { stroke-dashoffset: var(--gauge-target, 66); }
+   101→}
+   102→
+   103→@keyframes policeLine {
+   104→  from { background-position: 0 0; }
+   105→  to { background-position: 56px 0; }
+   106→}
+   107→
+   108→@keyframes pulseGlow {
+   109→  0%, 100% { opacity: 0.4; }
+   110→  50% { opacity: 0.8; }
+   111→}
+   112→
+   113→@keyframes typewriterBlink {
+   114→  0%, 50% { border-color: var(--amber); }
+   115→  51%, 100% { border-color: transparent; }
+   116→}
+   117→
+   118→@keyframes floatBadge {
+   119→  0%, 100% { transform: translateY(0); }
+   120→  50% { transform: translateY(-4px); }
+   121→}
+   122→
+   123→@keyframes nodeGlow {
+   124→  0%, 100% { box-shadow: 0 0 4px var(--red); }
+   125→  50% { box-shadow: 0 0 16px var(--red), 0 0 32px var(--red-glow); }
+   126→}
+   127→
+   128→/* ============================================
+   129→   SCROLL REVEAL SYSTEM
+   130→   ============================================ */
+   131→.reveal {
+   132→  opacity: 0;
+   133→  transform: translateY(30px);
+   134→  transition: opacity 0.7s ease, transform 0.7s ease;
+   135→}
+   136→
+   137→.reveal.visible {
+   138→  opacity: 1;
+   139→  transform: translateY(0);
+   140→}
+   141→
+   142→.reveal-delay-1 { transition-delay: 0.1s; }
+   143→.reveal-delay-2 { transition-delay: 0.2s; }
+   144→.reveal-delay-3 { transition-delay: 0.3s; }
+   145→.reveal-delay-4 { transition-delay: 0.4s; }
+   146→
+   147→/* ============================================
+   148→   SECTION COMMON
+   149→   ============================================ */
+   150→.section-title {
+   151→  font-family: var(--mono);
+   152→  font-size: 14px;
+   153→  font-weight: 700;
+   154→  letter-spacing: 0.15em;
+   155→  text-transform: uppercase;
+   156→  color: var(--amber);
+   157→  margin-bottom: 8px;
+   158→}
+   159→
+   160→.section-subtitle {
+   161→  font-family: var(--sans);
+   162→  font-size: 18px;
+   163→  color: var(--text-secondary);
+   164→  margin-bottom: 48px;
+   165→  max-width: 520px;
+   166→}
+   167→
+   168→.container {
+   169→  max-width: 1200px;
+   170→  margin: 0 auto;
+   171→  padding: 0 24px;
+   172→}
+   173→
+   174→section {
+   175→  padding: 100px 0;
+   176→  position: relative;
+   177→}
+   178→
+   179→/* ============================================
+   180→   1. NAVIGATION
+   181→   ============================================ */
+   182→.nav {
+   183→  position: fixed;
+   184→  top: 0;
+   185→  left: 0;
+   186→  right: 0;
+   187→  z-index: 1000;
+   188→  background: rgba(10, 10, 12, 0.8);
+   189→  backdrop-filter: blur(12px);
+   190→  -webkit-backdrop-filter: blur(12px);
+   191→  border-bottom: 1px solid rgba(201, 64, 64, 0.2);
+   192→  transition: backdrop-filter 0.3s, background 0.3s;
+   193→}
+   194→
+   195→.nav.scrolled {
+   196→  background: rgba(10, 10, 12, 0.95);
+   197→  backdrop-filter: blur(20px);
+   198→  -webkit-backdrop-filter: blur(20px);
+   199→}
+   200→
+   201→.nav-inner {
+   202→  max-width: 1200px;
+   203→  margin: 0 auto;
+   204→  padding: 0 24px;
+   205→  height: 64px;
+   206→  display: flex;
+   207→  align-items: center;
+   208→  justify-content: space-between;
+   209→}
+   210→
+   211→.nav-logo {
+   212→  display: flex;
+   213→  align-items: center;
+   214→  gap: 10px;
+   215→  font-family: var(--mono);
+   216→  font-weight: 700;
+   217→  font-size: 18px;
+   218→  color: var(--text-primary);
+   219→  letter-spacing: 0.05em;
+   220→  text-decoration: none;
+   221→}
+   222→
+   223→.nav-logo svg {
+   224→  width: 20px;
+   225→  height: 20px;
+   226→  flex-shrink: 0;
+   227→}
+   228→
+   229→.nav-links {
+   230→  display: flex;
+   231→  align-items: center;
+   232→  gap: 32px;
+   233→  list-style: none;
+   234→}
+   235→
+   236→.nav-links a {
+   237→  font-family: var(--mono);
+   238→  font-size: 12px;
+   239→  font-weight: 600;
+   240→  letter-spacing: 0.12em;
+   241→  text-transform: uppercase;
+   242→  color: var(--text-secondary);
+   243→  text-decoration: none;
+   244→  transition: color 0.2s;
+   245→}
+   246→
+   247→.nav-links a:hover {
+   248→  color: var(--text-primary);
+   249→}
+   250→
+   251→.nav-cta {
+   252→  font-family: var(--mono) !important;
+   253→  font-size: 12px !important;
+   254→  font-weight: 700 !important;
+   255→  letter-spacing: 0.1em;
+   256→  text-transform: uppercase;
+   257→  color: var(--amber) !important;
+   258→  border: 1px solid var(--amber);
+   259→  padding: 8px 20px;
+   260→  border-radius: 2px;
+   261→  transition: background 0.2s, color 0.2s !important;
+   262→}
+   263→
+   264→.nav-cta:hover {
+   265→  background: var(--amber) !important;
+   266→  color: var(--bg-dark) !important;
+   267→}
+   268→
+   269→.nav-mobile-toggle {
+   270→  display: none;
+   271→  background: none;
+   272→  border: none;
+   273→  cursor: pointer;
+   274→  padding: 4px;
+   275→}
+   276→
+   277→.nav-mobile-toggle svg {
+   278→  width: 24px;
+   279→  height: 24px;
+   280→  stroke: var(--text-primary);
+   281→}
+   282→
+   283→.mobile-menu {
+   284→  display: none;
+   285→  position: fixed;
+   286→  top: 64px;
+   287→  left: 0;
+   288→  right: 0;
+   289→  background: rgba(10, 10, 12, 0.98);
+   290→  backdrop-filter: blur(20px);
+   291→  border-bottom: 1px solid var(--border);
+   292→  padding: 24px;
+   293→  z-index: 999;
+   294→}
+   295→
+   296→.mobile-menu.open {
+   297→  display: block;
+   298→}
+   299→
+   300→.mobile-menu a {
+   301→  display: block;
+   302→  font-family: var(--mono);
+   303→  font-size: 13px;
+   304→  letter-spacing: 0.1em;
+   305→  text-transform: uppercase;
+   306→  color: var(--text-secondary);
+   307→  padding: 12px 0;
+   308→  border-bottom: 1px solid var(--border);
+   309→  text-decoration: none;
+   310→}
+   311→
+   312→.mobile-menu a:last-child {
+   313→  border-bottom: none;
+   314→}
+   315→
+   316→/* ============================================
+   317→   2. HERO SECTION — THE CRIME SCENE
+   318→   ============================================ */
+   319→.hero {
+   320→  min-height: 100vh;
+   321→  display: flex;
+   322→  flex-direction: column;
+   323→  justify-content: center;
+   324→  align-items: center;
+   325→  text-align: center;
+   326→  padding: 120px 24px 80px;
+   327→  position: relative;
+   328→  overflow: hidden;
+   329→  /* Cork board texture via layered gradients */
+   330→  background:
+   331→    radial-gradient(ellipse at var(--mx) var(--my), rgba(212, 160, 64, 0.06) 0%, transparent 50%),
+   332→    radial-gradient(circle at 20% 30%, rgba(40, 32, 20, 0.5) 0%, transparent 40%),
+   333→    radial-gradient(circle at 80% 20%, rgba(35, 28, 18, 0.4) 0%, transparent 35%),
+   334→    radial-gradient(circle at 60% 70%, rgba(38, 30, 22, 0.45) 0%, transparent 45%),
+   335→    radial-gradient(circle at 10% 80%, rgba(42, 34, 24, 0.35) 0%, transparent 30%),
+   336→    radial-gradient(circle at 90% 60%, rgba(36, 28, 20, 0.4) 0%, transparent 38%),
+   337→    radial-gradient(circle at 45% 15%, rgba(30, 24, 16, 0.3) 0%, transparent 25%),
+   338→    radial-gradient(circle at 75% 85%, rgba(44, 36, 26, 0.3) 0%, transparent 32%),
+   339→    var(--bg-board);
+   340→}
+   341→
+   342→.hero-content {
+   343→  max-width: 800px;
+   344→  position: relative;
+   345→  z-index: 2;
+   346→  margin-bottom: 60px;
+   347→}
+   348→
+   349→.hero-headline {
+   350→  font-family: var(--mono);
+   351→  font-size: 56px;
+   352→  font-weight: 700;
+   353→  line-height: 1.15;
+   354→  letter-spacing: 0.02em;
+   355→  margin-bottom: 24px;
+   356→  color: var(--text-primary);
+   357→}
+   358→
+   359→.hero-headline .lying {
+   360→  color: var(--red);
+   361→  text-shadow: 0 0 30px var(--red-glow), 0 0 60px rgba(201, 64, 64, 0.2);
+   362→}
+   363→
+   364→.hero-headline .typewriter-cursor {
+   365→  display: inline-block;
+   366→  width: 3px;
+   367→  height: 0.9em;
+   368→  background: var(--amber);
+   369→  margin-left: 2px;
+   370→  vertical-align: text-bottom;
+   371→  animation: typewriterBlink 1s infinite;
+   372→}
+   373→
+   374→.hero-sub {
+   375→  font-family: var(--sans);
+   376→  font-size: 19px;
+   377→  color: var(--text-secondary);
+   378→  line-height: 1.7;
+   379→  max-width: 600px;
+   380→  margin: 0 auto 36px;
+   381→}
+   382→
+   383→.hero-ctas {
+   384→  display: flex;
+   385→  gap: 16px;
+   386→  justify-content: center;
+   387→  flex-wrap: wrap;
+   388→}
+   389→
+   390→.btn-primary {
+   391→  display: inline-flex;
+   392→  align-items: center;
+   393→  gap: 8px;
+   394→  font-family: var(--mono);
+   395→  font-size: 14px;
+   396→  font-weight: 700;
+   397→  letter-spacing: 0.08em;
+   398→  text-transform: uppercase;
+   399→  background: var(--amber);
+   400→  color: var(--bg-dark);
+   401→  border: none;
+   402→  padding: 14px 32px;
+   403→  border-radius: 2px;
+   404→  cursor: pointer;
+   405→  transition: transform 0.15s, box-shadow 0.2s;
+   406→  text-decoration: none;
+   407→}
+   408→
+   409→.btn-primary:hover {
+   410→  transform: translateY(-2px);
+   411→  box-shadow: 0 8px 24px rgba(212, 160, 64, 0.3);
+   412→  color: var(--bg-dark);
+   413→}
+   414→
+   415→.btn-secondary {
+   416→  display: inline-flex;
+   417→  align-items: center;
+   418→  gap: 8px;
+   419→  font-family: var(--mono);
+   420→  font-size: 14px;
+   421→  font-weight: 700;
+   422→  letter-spacing: 0.08em;
+   423→  text-transform: uppercase;
+   424→  background: transparent;
+   425→  color: var(--amber);
+   426→  border: 1px solid var(--amber);
+   427→  padding: 14px 32px;
+   428→  border-radius: 2px;
+   429→  cursor: pointer;
+   430→  transition: background 0.2s, color 0.2s, transform 0.15s;
+   431→  text-decoration: none;
+   432→}
+   433→
+   434→.btn-secondary:hover {
+   435→  background: var(--amber);
+   436→  color: var(--bg-dark);
+   437→  transform: translateY(-2px);
+   438→}
+   439→
+   440→/* ---- Evidence Cards Board ---- */
+   441→.evidence-board {
+   442→  position: relative;
+   443→  max-width: 900px;
+   444→  width: 100%;
+   445→  height: 340px;
+   446→  margin: 0 auto;
+   447→}
+   448→
+   449→.evidence-board::after {
+   450→  content: '';
+   451→  position: absolute;
+   452→  inset: 0;
+   453→  background: radial-gradient(ellipse at center, transparent 50%, var(--bg-board) 100%);
+   454→  pointer-events: none;
+   455→  z-index: 1;
+   456→}
+   457→
+   458→.evidence-card {
+   459→  position: absolute;
+   460→  width: 240px;
+   461→  background: var(--bg-card);
+   462→  border: 1px solid var(--border);
+   463→  border-radius: 2px;
+   464→  padding: 32px 16px 16px;
+   465→  z-index: 2;
+   466→  transition: transform 0.3s, box-shadow 0.3s;
+   467→}
+   468→
+   469→.evidence-card:hover {
+   470→  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+   471→  z-index: 10;
+   472→}
+   473→
+   474→/* Pushpin */
+   475→.pushpin {
+   476→  position: absolute;
+   477→  top: -8px;
+   478→  left: 50%;
+   479→  transform: translateX(-50%);
+   480→  width: 16px;
+   481→  height: 16px;
+   482→  border-radius: 50%;
+   483→  background: radial-gradient(circle at 40% 35%, #e85050, var(--red) 50%, #8b2020);
+   484→  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.6), inset 0 1px 2px rgba(255, 255, 255, 0.2);
+   485→  z-index: 5;
+   486→}
+   487→
+   488→.pushpin.visible {
+   489→  animation: pushpinBounce 0.5s ease;
+   490→}
+   491→
+   492→/* Tape strip */
+   493→.tape-strip {
+   494→  position: absolute;
+   495→  top: -4px;
+   496→  left: 50%;
+   497→  transform: translateX(-50%) rotate(var(--tape-rotate, -2deg));
+   498→  width: 60px;
+   499→  height: 18px;
+   500→  background: rgba(255, 255, 255, 0.12);
+   501→  border: 1px solid rgba(255, 255, 255, 0.06);
+   502→  z-index: 4;
+   503→  border-radius: 1px;
+   504→}
+   505→
+   506→.card-1 {
+   507→  top: 30px;
+   508→  left: 20px;
+   509→  transform: rotate(-2deg);
+   510→}
+   511→
+   512→.card-2 {
+   513→  top: 10px;
+   514→  left: 50%;
+   515→  margin-left: -120px;
+   516→  transform: rotate(1.5deg);
+   517→}
+   518→
+   519→.card-3 {
+   520→  top: 40px;
+   521→  right: 20px;
+   522→  transform: rotate(-1deg);
+   523→}
+   524→
+   525→.card-label {
+   526→  font-family: var(--mono);
+   527→  font-size: 10px;
+   528→  letter-spacing: 0.12em;
+   529→  text-transform: uppercase;
+   530→  color: var(--text-dim);
+   531→  margin-bottom: 6px;
+   532→}
+   533→
+   534→.card-title {
+   535→  font-family: var(--mono);
+   536→  font-size: 13px;
+   537→  font-weight: 700;
+   538→  color: var(--text-primary);
+   539→  margin-bottom: 12px;
+   540→  line-height: 1.4;
+   541→}
+   542→
+   543→/* FLAKY stamp */
+   544→.stamp {
+   545→  display: inline-block;
+   546→  font-family: var(--mono);
+   547→  font-size: 11px;
+   548→  font-weight: 900;
+   549→  letter-spacing: 0.15em;
+   550→  text-transform: uppercase;
+   551→  color: var(--red);
+   552→  border: 2px solid var(--red);
+   553→  padding: 2px 10px;
+   554→  transform: rotate(-8deg);
+   555→  opacity: 0;
+   556→}
+   557→
+   558→.stamp.visible {
+   559→  animation: stampSlam 0.4s ease forwards;
+   560→}
+   561→
+   562→/* Mini bar chart */
+   563→.mini-bars {
+   564→  display: flex;
+   565→  align-items: flex-end;
+   566→  gap: 4px;
+   567→  height: 50px;
+   568→  margin-top: 8px;
+   569→}
+   570→
+   571→.mini-bar {
+   572→  flex: 1;
+   573→  border-radius: 1px 1px 0 0;
+   574→  min-width: 8px;
+   575→}
+   576→
+   577→.mini-bar.pass {
+   578→  background: var(--green);
+   579→}
+   580→
+   581→.mini-bar.fail {
+   582→  background: var(--red);
+   583→}
+   584→
+   585→/* Circular gauge mini */
+   586→.gauge-mini {
+   587→  width: 64px;
+   588→  height: 64px;
+   589→  margin: 8px auto 0;
+   590→  position: relative;
+   591→}
+   592→
+   593→.gauge-mini svg {
+   594→  width: 100%;
+   595→  height: 100%;
+   596→  transform: rotate(-90deg);
+   597→}
+   598→
+   599→.gauge-mini-label {
+   600→  position: absolute;
+   601→  inset: 0;
+   602→  display: flex;
+   603→  align-items: center;
+   604→  justify-content: center;
+   605→  font-family: var(--mono);
+   606→  font-size: 16px;
+   607→  font-weight: 700;
+   608→  color: var(--red);
+   609→}
+   610→
+   611→/* Red strings SVG overlay */
+   612→.red-strings {
+   613→  position: absolute;
+   614→  inset: 0;
+   615→  z-index: 3;
+   616→  pointer-events: none;
+   617→}
+   618→
+   619→.red-strings line,
+   620→.red-strings path {
+   621→  stroke: var(--red);
+   622→  stroke-width: 1.5;
+   623→  opacity: 0.6;
+   624→  fill: none;
+   625→  stroke-dasharray: 500;
+   626→  stroke-dashoffset: 500;
+   627→}
+   628→
+   629→.red-strings line.animate,
+   630→.red-strings path.animate {
+   631→  animation: drawLine 2s ease forwards;
+   632→}
+   633→
+   634→.red-strings circle {
+   635→  fill: var(--red);
+   636→  opacity: 0;
+   637→}
+   638→
+   639→.red-strings circle.animate {
+   640→  opacity: 0.8;
+   641→  transition: opacity 0.3s ease 1.8s;
+   642→}
+   643→
+   644→/* ============================================
+   645→   3. CLOSED CASES — STATS
+   646→   ============================================ */
+   647→.stats-section {
+   648→  border-top: 2px solid var(--amber-dim);
+   649→  border-bottom: 1px solid var(--border);
+   650→  background: var(--bg-dark);
+   651→  padding: 60px 0;
+   652→}
+   653→
+   654→.stats-grid {
+   655→  display: grid;
+   656→  grid-template-columns: repeat(3, 1fr);
+   657→  gap: 40px;
+   658→  text-align: center;
+   659→}
+   660→
+   661→.stat-item {
+   662→  padding: 24px;
+   663→}
+   664→
+   665→.stat-icon {
+   666→  width: 32px;
+   667→  height: 40px;
+   668→  margin: 0 auto 16px;
+   669→  opacity: 0.6;
+   670→}
+   671→
+   672→.stat-number {
+   673→  font-family: var(--mono);
+   674→  font-size: 48px;
+   675→  font-weight: 700;
+   676→  color: var(--amber);
+   677→  line-height: 1;
+   678→  margin-bottom: 8px;
+   679→}
+   680→
+   681→.stat-label {
+   682→  font-family: var(--sans);
+   683→  font-size: 14px;
+   684→  color: var(--text-secondary);
+   685→  line-height: 1.5;
+   686→  max-width: 280px;
+   687→  margin: 0 auto;
+   688→}
+   689→
+   690→/* ============================================
+   691→   4. THE INVESTIGATION — HOW IT WORKS
+   692→   ============================================ */
+   693→.investigation-section {
+   694→  background: var(--bg-dark);
+   695→}
+   696→
+   697→.investigation-grid {
+   698→  display: grid;
+   699→  grid-template-columns: repeat(4, 1fr);
+   700→  gap: 24px;
+   701→  position: relative;
+   702→}
+   703→
+   704→.step-card {
+   705→  background: var(--bg-card);
+   706→  border: 1px solid var(--border);
+   707→  border-radius: 2px;
+   708→  padding: 32px 20px 24px;
+   709→  position: relative;
+   710→  transition: transform 0.3s, border-color 0.3s, box-shadow 0.3s;
+   711→}
+   712→
+   713→.step-card:hover {
+   714→  transform: translateY(-4px);
+   715→  border-color: var(--amber-dim);
+   716→  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 0 0 1px var(--amber-dim);
+   717→}
+   718→
+   719→.step-number {
+   720→  display: inline-flex;
+   721→  align-items: center;
+   722→  justify-content: center;
+   723→  width: 32px;
+   724→  height: 32px;
+   725→  background: var(--amber);
+   726→  color: var(--bg-dark);
+   727→  font-family: var(--mono);
+   728→  font-size: 14px;
+   729→  font-weight: 900;
+   730→  border-radius: 50%;
+   731→  margin-bottom: 16px;
+   732→}
+   733→
+   734→.step-title {
+   735→  font-family: var(--mono);
+   736→  font-size: 14px;
+   737→  font-weight: 700;
+   738→  text-transform: uppercase;
+   739→  letter-spacing: 0.06em;
+   740→  color: var(--text-primary);
+   741→  margin-bottom: 12px;
+   742→}
+   743→
+   744→.step-desc {
+   745→  font-family: var(--sans);
+   746→  font-size: 14px;
+   747→  color: var(--text-secondary);
+   748→  line-height: 1.6;
+   749→  margin-bottom: 16px;
+   750→}
+   751→
+   752→.step-icon {
+   753→  width: 40px;
+   754→  height: 40px;
+   755→  opacity: 0.5;
+   756→}
+   757→
+   758→/* Dashed connector lines */
+   759→.step-connectors {
+   760→  display: none;
+   761→}
+   762→
+   763→/* ============================================
+   764→   5. SUSPECT PROFILES
+   765→   ============================================ */
+   766→.suspects-section {
+   767→  background: var(--bg-dark);
+   768→}
+   769→
+   770→.suspects-grid {
+   771→  display: grid;
+   772→  grid-template-columns: repeat(2, 1fr);
+   773→  gap: 24px;
+   774→}
+   775→
+   776→.suspect-card {
+   777→  background: var(--bg-card);
+   778→  border: 1px solid var(--border);
+   779→  border-left: 4px solid var(--suspect-accent, var(--red));
+   780→  border-radius: 2px;
+   781→  padding: 28px 24px;
+   782→  position: relative;
+   783→  overflow: hidden;
+   784→  transition: transform 0.3s, box-shadow 0.3s;
+   785→}
+   786→
+   787→.suspect-card:hover {
+   788→  transform: translateY(-4px);
+   789→  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+   790→}
+   791→
+   792→.suspect-card:hover .suspect-left-border-glow {
+   793→  opacity: 1;
+   794→}
+   795→
+   796→.suspect-left-border-glow {
+   797→  position: absolute;
+   798→  left: 0;
+   799→  top: 0;
+   800→  bottom: 0;
+   801→  width: 4px;
+   802→  opacity: 0;
+   803→  transition: opacity 0.3s;
+   804→}
+   805→
+   806→.suspect-stamp {
+   807→  position: absolute;
+   808→  top: 16px;
+   809→  right: 16px;
+   810→  font-family: var(--mono);
+   811→  font-size: 9px;
+   812→  font-weight: 900;
+   813→  letter-spacing: 0.15em;
+   814→  text-transform: uppercase;
+   815→  padding: 3px 10px;
+   816→  border: 2px solid;
+   817→  transform: rotate(6deg);
+   818→  opacity: 0;
+   819→}
+   820→
+   821→.suspect-stamp.visible {
+   822→  animation: stampSlam 0.4s ease forwards;
+   823→}
+   824→
+   825→.suspect-header {
+   826→  display: flex;
+   827→  align-items: flex-start;
+   828→  gap: 14px;
+   829→  margin-bottom: 12px;
+   830→}
+   831→
+   832→.suspect-icon-wrap {
+   833→  flex-shrink: 0;
+   834→  width: 44px;
+   835→  height: 44px;
+   836→}
+   837→
+   838→.suspect-name {
+   839→  font-family: var(--mono);
+   840→  font-size: 16px;
+   841→  font-weight: 700;
+   842→  text-transform: uppercase;
+   843→  letter-spacing: 0.05em;
+   844→}
+   845→
+   846→.suspect-category {
+   847→  font-family: var(--mono);
+   848→  font-size: 11px;
+   849→  color: var(--text-dim);
+   850→  text-transform: uppercase;
+   851→  letter-spacing: 0.08em;
+   852→  margin-top: 2px;
+   853→}
+   854→
+   855→.suspect-desc {
+   856→  font-family: var(--sans);
+   857→  font-size: 14px;
+   858→  color: var(--text-secondary);
+   859→  line-height: 1.6;
+   860→  margin-bottom: 16px;
+   861→}
+   862→
+   863→/* Mini visuals for suspect cards */
+   864→.suspect-visual {
+   865→  height: 48px;
+   866→  display: flex;
+   867→  align-items: flex-end;
+   868→  gap: 6px;
+   869→  padding: 8px 0;
+   870→  border-top: 1px solid var(--border);
+   871→}
+   872→
+   873→/* Timing bars */
+   874→.timing-bars {
+   875→  display: flex;
+   876→  align-items: flex-end;
+   877→  gap: 5px;
+   878→  height: 36px;
+   879→  flex: 1;
+   880→}
+   881→
+   882→.timing-bar {
+   883→  flex: 1;
+   884→  border-radius: 1px 1px 0 0;
+   885→  background: var(--amber);
+   886→  min-width: 12px;
+   887→  position: relative;
+   888→}
+   889→
+   890→.timing-bar.spike {
+   891→  background: var(--red);
+   892→}
+   893→
+   894→/* Pass/fail dots pattern */
+   895→.pattern-dots {
+   896→  display: flex;
+   897→  gap: 8px;
+   898→  align-items: center;
+   899→  flex: 1;
+   900→}
+   901→
+   902→.pattern-dot {
+   903→  width: 20px;
+   904→  height: 20px;
+   905→  border-radius: 50%;
+   906→  display: flex;
+   907→  align-items: center;
+   908→  justify-content: center;
+   909→  font-family: var(--mono);
+   910→  font-size: 10px;
+   911→  font-weight: 700;
+   912→}
+   913→
+   914→.pattern-dot.pass-dot {
+   915→  background: rgba(61, 153, 112, 0.2);
+   916→  color: var(--green);
+   917→  border: 1px solid var(--green);
+   918→}
+   919→
+   920→.pattern-dot.fail-dot {
+   921→  background: rgba(201, 64, 64, 0.2);
+   922→  color: var(--red);
+   923→  border: 1px solid var(--red);
+   924→}
+   925→
+   926→/* Connected nodes */
+   927→.nodes-visual {
+   928→  display: flex;
+   929→  align-items: center;
+   930→  gap: 6px;
+   931→  flex: 1;
+   932→  justify-content: center;
+   933→}
+   934→
+   935→.node {
+   936→  width: 18px;
+   937→  height: 18px;
+   938→  border-radius: 50%;
+   939→  background: var(--text-dim);
+   940→  position: relative;
+   941→}
+   942→
+   943→.node.corrupt {
+   944→  background: var(--red);
+   945→  animation: nodeGlow 2s infinite;
+   946→}
+   947→
+   948→.node-line {
+   949→  width: 16px;
+   950→  height: 1px;
+   951→  background: var(--text-dim);
+   952→}
+   953→
+   954→/* Stacked errors */
+   955→.stacked-errors {
+   956→  display: flex;
+   957→  flex-direction: column;
+   958→  gap: 4px;
+   959→  flex: 1;
+   960→}
+   961→
+   962→.error-line {
+   963→  font-family: var(--mono);
+   964→  font-size: 10px;
+   965→  color: var(--text-dim);
+   966→  padding: 3px 8px;
+   967→  background: rgba(74, 143, 212, 0.06);
+   968→  border-left: 2px solid var(--blue);
+   969→  white-space: nowrap;
+   970→  overflow: hidden;
+   971→  text-overflow: ellipsis;
+   972→}
+   973→
+   974→.error-line:nth-child(2) {
+   975→  color: var(--text-secondary);
+   976→  border-left-color: var(--amber);
+   977→  background: rgba(212, 160, 64, 0.06);
+   978→}
+   979→
+   980→.error-line:nth-child(3) {
+   981→  border-left-color: var(--red);
+   982→  background: rgba(201, 64, 64, 0.06);
+   983→}
+   984→
+   985→.error-line:nth-child(4) {
+   986→  border-left-color: var(--purple);
+   987→  background: rgba(124, 92, 191, 0.06);
+   988→}
+   989→
+   990→/* ============================================
+   991→   6. THE VERDICT — TRUST SCORE
+   992→   ============================================ */
+   993→.verdict-section {
+   994→  background: var(--bg-dark);
+   995→}
+   996→
+   997→.verdict-grid {
+   998→  display: grid;
+   999→  grid-template-columns: 380px 1fr;
+  1000→  gap: 60px;
+  1001→  align-items: start;
+  1002→}
+  1003→
+  1004→/* Trust Score Gauge */
+  1005→.gauge-container {
+  1006→  text-align: center;
+  1007→  padding: 40px 0;
+  1008→}
+  1009→
+  1010→.gauge-large {
+  1011→  width: 220px;
+  1012→  height: 220px;
+  1013→  margin: 0 auto 24px;
+  1014→  position: relative;
+  1015→}
+  1016→
+  1017→.gauge-large svg {
+  1018→  width: 100%;
+  1019→  height: 100%;
+  1020→  transform: rotate(-90deg);
+  1021→}
+  1022→
+  1023→.gauge-large .gauge-bg {
+  1024→  fill: none;
+  1025→  stroke: var(--border);
+  1026→  stroke-width: 10;
+  1027→}
+  1028→
+  1029→.gauge-large .gauge-fill {
+  1030→  fill: none;
+  1031→  stroke: var(--green);
+  1032→  stroke-width: 10;
+  1033→  stroke-linecap: round;
+  1034→  stroke-dasharray: 440;
+  1035→  stroke-dashoffset: 440;
+  1036→  transition: stroke-dashoffset 2s ease;
+  1037→}
+  1038→
+  1039→.gauge-large .gauge-fill.animate {
+  1040→  stroke-dashoffset: 66;
+  1041→}
+  1042→
+  1043→.gauge-score {
+  1044→  position: absolute;
+  1045→  inset: 0;
+  1046→  display: flex;
+  1047→  flex-direction: column;
+  1048→  align-items: center;
+  1049→  justify-content: center;
+  1050→}
+  1051→
+  1052→.gauge-score-num {
+  1053→  font-family: var(--mono);
+  1054→  font-size: 52px;
+  1055→  font-weight: 700;
+  1056→  color: var(--green);
+  1057→  line-height: 1;
+  1058→}
+  1059→
+  1060→.gauge-score-label {
+  1061→  font-family: var(--mono);
+  1062→  font-size: 11px;
+  1063→  letter-spacing: 0.15em;
+  1064→  text-transform: uppercase;
+  1065→  color: var(--text-dim);
+  1066→  margin-top: 8px;
+  1067→}
+  1068→
+  1069→.verdict-label {
+  1070→  font-family: var(--mono);
+  1071→  font-size: 14px;
+  1072→  font-weight: 700;
+  1073→  letter-spacing: 0.08em;
+  1074→  text-transform: uppercase;
+  1075→  margin-top: 8px;
+  1076→}
+  1077→
+  1078→.verdict-label.trusted {
+  1079→  color: var(--green);
+  1080→}
+  1081→
+  1082→/* Evidence breakdown */
+  1083→.evidence-list {
+  1084→  display: flex;
+  1085→  flex-direction: column;
+  1086→  gap: 20px;
+  1087→  padding-top: 20px;
+  1088→}
+  1089→
+  1090→.evidence-item {
+  1091→  padding: 16px 20px;
+  1092→  background: var(--bg-card);
+  1093→  border: 1px solid var(--border);
+  1094→  border-radius: 2px;
+  1095→}
+  1096→
+  1097→.evidence-tag {
+  1098→  display: inline-block;
+  1099→  font-family: var(--mono);
+  1100→  font-size: 10px;
+  1101→  font-weight: 700;
+  1102→  letter-spacing: 0.12em;
+  1103→  text-transform: uppercase;
+  1104→  color: var(--amber);
+  1105→  border: 1px solid var(--amber-dim);
+  1106→  padding: 2px 8px;
+  1107→  margin-bottom: 10px;
+  1108→}
+  1109→
+  1110→.evidence-name {
+  1111→  font-family: var(--mono);
+  1112→  font-size: 13px;
+  1113→  font-weight: 600;
+  1114→  color: var(--text-primary);
+  1115→  margin-bottom: 4px;
+  1116→}
+  1117→
+  1118→.evidence-value {
+  1119→  font-family: var(--sans);
+  1120→  font-size: 14px;
+  1121→  color: var(--text-secondary);
+  1122→  margin-bottom: 8px;
+  1123→}
+  1124→
+  1125→.evidence-bar-track {
+  1126→  height: 6px;
+  1127→  background: var(--border);
+  1128→  border-radius: 3px;
+  1129→  overflow: hidden;
+  1130→}
+  1131→
+  1132→.evidence-bar-fill {
+  1133→  height: 100%;
+  1134→  border-radius: 3px;
+  1135→  background: var(--green);
+  1136→  transition: width 1.5s ease;
+  1137→  width: 0;
+  1138→}
+  1139→
+  1140→.evidence-bar-fill.animate {
+  1141→  width: var(--bar-width, 50%);
+  1142→}
+  1143→
+  1144→.evidence-points {
+  1145→  font-family: var(--mono);
+  1146→  font-size: 12px;
+  1147→  color: var(--text-dim);
+  1148→  margin-top: 4px;
+  1149→  text-align: right;
+  1150→}
+  1151→
+  1152→.evidence-item.penalty {
+  1153→  border-color: var(--border-red);
+  1154→}
+  1155→
+  1156→.evidence-item.penalty .evidence-tag {
+  1157→  color: var(--red);
+  1158→  border-color: var(--border-red);
+  1159→}
+  1160→
+  1161→.evidence-item.penalty .evidence-value {
+  1162→  color: var(--red);
+  1163→}
+  1164→
+  1165→.evidence-item.penalty .evidence-bar-fill {
+  1166→  background: var(--red);
+  1167→}
+  1168→
+  1169→.verdict-total {
+  1170→  margin-top: 24px;
+  1171→  padding: 20px;
+  1172→  background: var(--bg-card);
+  1173→  border: 2px solid var(--amber-dim);
+  1174→  border-radius: 2px;
+  1175→  text-align: center;
+  1176→}
+  1177→
+  1178→.verdict-total-label {
+  1179→  font-family: var(--mono);
+  1180→  font-size: 12px;
+  1181→  letter-spacing: 0.12em;
+  1182→  text-transform: uppercase;
+  1183→  color: var(--text-dim);
+  1184→  margin-bottom: 8px;
+  1185→}
+  1186→
+  1187→.verdict-total-score {
+  1188→  font-family: var(--mono);
+  1189→  font-size: 36px;
+  1190→  font-weight: 700;
+  1191→  color: var(--amber);
+  1192→}
+  1193→
+  1194→/* ============================================
+  1195→   7. CASE FILES — FEATURES GRID
+  1196→   ============================================ */
+  1197→.features-section {
+  1198→  background: var(--bg-dark);
+  1199→}
+  1200→
+  1201→.features-grid {
+  1202→  display: grid;
+  1203→  grid-template-columns: repeat(4, 1fr);
+  1204→  gap: 20px;
+  1205→}
+  1206→
+  1207→.feature-folder {
+  1208→  background: var(--bg-card);
+  1209→  border: 1px solid var(--border);
+  1210→  border-radius: 2px 2px 0 0;
+  1211→  position: relative;
+  1212→  transition: transform 0.3s, box-shadow 0.3s;
+  1213→  cursor: default;
+  1214→}
+  1215→
+  1216→.feature-folder:hover {
+  1217→  transform: translateY(-4px) rotate(-0.5deg);
+  1218→  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  1219→}
+  1220→
+  1221→.folder-tab {
+  1222→  background: var(--amber-dim);
+  1223→  color: var(--text-primary);
+  1224→  font-family: var(--mono);
+  1225→  font-size: 11px;
+  1226→  font-weight: 700;
+  1227→  letter-spacing: 0.06em;
+  1228→  text-transform: uppercase;
+  1229→  padding: 6px 14px;
+  1230→  display: inline-block;
+  1231→  border-radius: 2px 2px 0 0;
+  1232→  margin-left: 16px;
+  1233→  position: relative;
+  1234→  top: 0;
+  1235→}
+  1236→
+  1237→.folder-body {
+  1238→  padding: 24px 16px 20px;
+  1239→  display: flex;
+  1240→  flex-direction: column;
+  1241→  align-items: center;
+  1242→  text-align: center;
+  1243→  gap: 10px;
+  1244→}
+  1245→
+  1246→.folder-icon {
+  1247→  width: 32px;
+  1248→  height: 32px;
+  1249→  opacity: 0.6;
+  1250→}
+  1251→
+  1252→.folder-desc {
+  1253→  font-family: var(--sans);
+  1254→  font-size: 13px;
+  1255→  color: var(--text-secondary);
+  1256→  line-height: 1.5;
+  1257→}
+  1258→
+  1259→/* ============================================
+  1260→   8. OPEN YOUR CASE — SETUP CODE
+  1261→   ============================================ */
+  1262→.setup-section {
+  1263→  background: var(--bg-dark);
+  1264→}
+  1265→
+  1266→.code-tabs {
+  1267→  display: flex;
+  1268→  gap: 0;
+  1269→  margin-bottom: 0;
+  1270→  border-bottom: none;
+  1271→}
+  1272→
+  1273→.code-tab {
+  1274→  font-family: var(--mono);
+  1275→  font-size: 12px;
+  1276→  font-weight: 700;
+  1277→  letter-spacing: 0.08em;
+  1278→  text-transform: uppercase;
+  1279→  color: var(--text-dim);
+  1280→  background: var(--bg-surface);
+  1281→  border: 1px solid var(--border);
+  1282→  border-bottom: none;
+  1283→  padding: 12px 24px;
+  1284→  cursor: pointer;
+  1285→  transition: color 0.2s, background 0.2s;
+  1286→  border-radius: 2px 2px 0 0;
+  1287→  margin-right: 2px;
+  1288→}
+  1289→
+  1290→.code-tab.active {
+  1291→  color: var(--amber);
+  1292→  background: var(--bg-card);
+  1293→  border-color: var(--amber-dim);
+  1294→}
+  1295→
+  1296→.code-tab:hover {
+  1297→  color: var(--text-secondary);
+  1298→}
+  1299→
+  1300→.code-block-wrap {
+  1301→  background: var(--bg-card);
+  1302→  border: 1px solid var(--border);
+  1303→  border-radius: 0 2px 2px 2px;
+  1304→  overflow: hidden;
+  1305→  position: relative;
+  1306→}
+  1307→
+  1308→.code-block-label {
+  1309→  position: absolute;
+  1310→  top: 12px;
+  1311→  right: 16px;
+  1312→  font-family: var(--mono);
+  1313→  font-size: 10px;
+  1314→  letter-spacing: 0.12em;
+  1315→  text-transform: uppercase;
+  1316→  color: var(--text-dim);
+  1317→  background: var(--bg-surface);
+  1318→  border: 1px solid var(--border);
+  1319→  padding: 2px 10px;
+  1320→  border-radius: 2px;
+  1321→  z-index: 2;
+  1322→}
+  1323→
+  1324→.code-copy-btn {
+  1325→  position: absolute;
+  1326→  top: 12px;
+  1327→  right: 100px;
+  1328→  font-family: var(--mono);
+  1329→  font-size: 10px;
+  1330→  letter-spacing: 0.08em;
+  1331→  text-transform: uppercase;
+  1332→  color: var(--text-dim);
+  1333→  background: var(--bg-surface);
+  1334→  border: 1px solid var(--border);
+  1335→  padding: 4px 12px;
+  1336→  border-radius: 2px;
+  1337→  cursor: pointer;
+  1338→  z-index: 2;
+  1339→  transition: color 0.2s, border-color 0.2s;
+  1340→}
+  1341→
+  1342→.code-copy-btn:hover {
+  1343→  color: var(--amber);
+  1344→  border-color: var(--amber-dim);
+  1345→}
+  1346→
+  1347→.code-block {
+  1348→  padding: 48px 0 20px 0;
+  1349→  overflow-x: auto;
+  1350→  display: none;
+  1351→}
+  1352→
+  1353→.code-block.active {
+  1354→  display: block;
+  1355→}
+  1356→
+  1357→.code-line {
+  1358→  display: flex;
+  1359→  line-height: 1.7;
+  1360→  font-family: var(--mono);
+  1361→  font-size: 13px;
+  1362→}
+  1363→
+  1364→.code-line:hover {
+  1365→  background: rgba(255, 255, 255, 0.02);
+  1366→}
+  1367→
+  1368→.line-num {
+  1369→  width: 48px;
+  1370→  text-align: right;
+  1371→  padding-right: 16px;
+  1372→  color: var(--text-dim);
+  1373→  user-select: none;
+  1374→  flex-shrink: 0;
+  1375→  font-size: 12px;
+  1376→}
+  1377→
+  1378→.line-content {
+  1379→  flex: 1;
+  1380→  white-space: pre;
+  1381→}
+  1382→
+  1383→/* Syntax highlighting classes */
+  1384→.syn-keyword { color: var(--amber); }
+  1385→.syn-string { color: var(--green); }
+  1386→.syn-comment { color: var(--text-dim); font-style: italic; }
+  1387→.syn-value { color: var(--blue); }
+  1388→.syn-plain { color: var(--text-secondary); }
+  1389→
+  1390→/* ============================================
+  1391→   9. SENTENCING — PRICING
+  1392→   ============================================ */
+  1393→.pricing-section {
+  1394→  background: var(--bg-dark);
+  1395→}
+  1396→
+  1397→.pricing-toggle {
+  1398→  display: flex;
+  1399→  align-items: center;
+  1400→  justify-content: center;
+  1401→  gap: 12px;
+  1402→  margin-bottom: 48px;
+  1403→}
+  1404→
+  1405→.pricing-toggle-label {
+  1406→  font-family: var(--mono);
+  1407→  font-size: 13px;
+  1408→  color: var(--text-secondary);
+  1409→  letter-spacing: 0.05em;
+  1410→}
+  1411→
+  1412→.pricing-toggle-label.active {
+  1413→  color: var(--amber);
+  1414→}
+  1415→
+  1416→.pricing-toggle-switch {
+  1417→  width: 48px;
+  1418→  height: 26px;
+  1419→  background: var(--border);
+  1420→  border-radius: 13px;
+  1421→  position: relative;
+  1422→  cursor: pointer;
+  1423→  transition: background 0.3s;
+  1424→  border: none;
+  1425→  padding: 0;
+  1426→}
+  1427→
+  1428→.pricing-toggle-switch.active {
+  1429→  background: var(--amber-dim);
+  1430→}
+  1431→
+  1432→.pricing-toggle-switch::after {
+  1433→  content: '';
+  1434→  position: absolute;
+  1435→  width: 20px;
+  1436→  height: 20px;
+  1437→  background: var(--text-primary);
+  1438→  border-radius: 50%;
+  1439→  top: 3px;
+  1440→  left: 3px;
+  1441→  transition: transform 0.3s;
+  1442→}
+  1443→
+  1444→.pricing-toggle-switch.active::after {
+  1445→  transform: translateX(22px);
+  1446→}
+  1447→
+  1448→.pricing-save {
+  1449→  font-family: var(--mono);
+  1450→  font-size: 11px;
+  1451→  color: var(--green);
+  1452→  letter-spacing: 0.05em;
+  1453→}
+  1454→
+  1455→.pricing-grid {
+  1456→  display: grid;
+  1457→  grid-template-columns: repeat(3, 1fr);
+  1458→  gap: 24px;
+  1459→  align-items: start;
+  1460→}
+  1461→
+  1462→.pricing-card {
+  1463→  background: var(--bg-card);
+  1464→  border: 1px solid var(--border);
+  1465→  border-radius: 2px;
+  1466→  padding: 36px 28px;
+  1467→  position: relative;
+  1468→  transition: transform 0.3s, box-shadow 0.3s;
+  1469→}
+  1470→
+  1471→.pricing-card:hover {
+  1472→  transform: translateY(-4px);
+  1473→  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+  1474→}
+  1475→
+  1476→.pricing-card.featured {
+  1477→  border-color: var(--amber);
+  1478→  box-shadow: 0 0 40px rgba(212, 160, 64, 0.08);
+  1479→}
+  1480→
+  1481→.pricing-popular-stamp {
+  1482→  position: absolute;
+  1483→  top: 16px;
+  1484→  right: 16px;
+  1485→  font-family: var(--mono);
+  1486→  font-size: 9px;
+  1487→  font-weight: 900;
+  1488→  letter-spacing: 0.12em;
+  1489→  text-transform: uppercase;
+  1490→  color: var(--bg-dark);
+  1491→  background: var(--amber);
+  1492→  padding: 3px 10px;
+  1493→  transform: rotate(3deg);
+  1494→}
+  1495→
+  1496→.pricing-tier-name {
+  1497→  font-family: var(--mono);
+  1498→  font-size: 13px;
+  1499→  font-weight: 700;
+  1500→  letter-spacing: 0.1em;
+  1501→  text-transform: uppercase;
+  1502→  color: var(--text-secondary);
+  1503→  margin-bottom: 8px;
+  1504→}
+  1505→
+  1506→.pricing-subtitle {
+  1507→  font-family: var(--mono);
+  1508→  font-size: 11px;
+  1509→  color: var(--text-dim);
+  1510→  letter-spacing: 0.05em;
+  1511→  margin-bottom: 20px;
+  1512→}
+  1513→
+  1514→.pricing-price {
+  1515→  font-family: var(--mono);
+  1516→  font-size: 48px;
+  1517→  font-weight: 700;
+  1518→  color: var(--text-primary);
+  1519→  line-height: 1;
+  1520→  margin-bottom: 4px;
+  1521→}
+  1522→
+  1523→.pricing-price-period {
+  1524→  font-family: var(--sans);
+  1525→  font-size: 14px;
+  1526→  color: var(--text-dim);
+  1527→  margin-bottom: 24px;
+  1528→}
+  1529→
+  1530→.pricing-features {
+  1531→  list-style: none;
+  1532→  display: flex;
+  1533→  flex-direction: column;
+  1534→  gap: 10px;
+  1535→  margin-bottom: 28px;
+  1536→}
+  1537→
+  1538→.pricing-features li {
+  1539→  font-family: var(--sans);
+  1540→  font-size: 14px;
+  1541→  color: var(--text-secondary);
+  1542→  display: flex;
+  1543→  align-items: flex-start;
+  1544→  gap: 10px;
+  1545→  line-height: 1.4;
+  1546→}
+  1547→
+  1548→.pricing-features li svg {
+  1549→  flex-shrink: 0;
+  1550→  width: 16px;
+  1551→  height: 16px;
+  1552→  margin-top: 2px;
+  1553→}
+  1554→
+  1555→.pricing-btn {
+  1556→  display: block;
+  1557→  width: 100%;
+  1558→  text-align: center;
+  1559→  font-family: var(--mono);
+  1560→  font-size: 13px;
+  1561→  font-weight: 700;
+  1562→  letter-spacing: 0.08em;
+  1563→  text-transform: uppercase;
+  1564→  padding: 14px;
+  1565→  border-radius: 2px;
+  1566→  cursor: pointer;
+  1567→  transition: transform 0.15s, box-shadow 0.2s;
+  1568→  text-decoration: none;
+  1569→}
+  1570→
+  1571→.pricing-btn-primary {
+  1572→  background: var(--amber);
+  1573→  color: var(--bg-dark);
+  1574→  border: 1px solid var(--amber);
+  1575→}
+  1576→
+  1577→.pricing-btn-primary:hover {
+  1578→  transform: translateY(-2px);
+  1579→  box-shadow: 0 8px 24px rgba(212, 160, 64, 0.3);
+  1580→  color: var(--bg-dark);
+  1581→}
+  1582→
+  1583→.pricing-btn-secondary {
+  1584→  background: transparent;
+  1585→  color: var(--text-secondary);
+  1586→  border: 1px solid var(--border);
+  1587→}
+  1588→
+  1589→.pricing-btn-secondary:hover {
+  1590→  border-color: var(--text-dim);
+  1591→  color: var(--text-primary);
+  1592→  transform: translateY(-2px);
+  1593→}
+  1594→
+  1595→/* ============================================
+  1596→   10. CROSS-EXAMINATION — FAQ
+  1597→   ============================================ */
+  1598→.faq-section {
+  1599→  background: var(--bg-dark);
+  1600→}
+  1601→
+  1602→.faq-list {
+  1603→  max-width: 760px;
+  1604→  margin: 0 auto;
+  1605→  display: flex;
+  1606→  flex-direction: column;
+  1607→  gap: 2px;
+  1608→}
+  1609→
+  1610→.faq-item {
+  1611→  border: 1px solid var(--border);
+  1612→  border-radius: 2px;
+  1613→  overflow: hidden;
+  1614→  transition: border-color 0.3s;
+  1615→}
+  1616→
+  1617→.faq-item.open {
+  1618→  border-color: var(--amber-dim);
+  1619→}
+  1620→
+  1621→.faq-question {
+  1622→  display: flex;
+  1623→  align-items: center;
+  1624→  justify-content: space-between;
+  1625→  width: 100%;
+  1626→  padding: 20px 24px;
+  1627→  background: var(--bg-card);
+  1628→  border: none;
+  1629→  color: var(--text-primary);
+  1630→  font-family: var(--mono);
+  1631→  font-size: 14px;
+  1632→  font-weight: 600;
+  1633→  line-height: 1.5;
+  1634→  text-align: left;
+  1635→  cursor: pointer;
+  1636→  transition: background 0.2s;
+  1637→  gap: 16px;
+  1638→}
+  1639→
+  1640→.faq-question:hover {
+  1641→  background: rgba(28, 26, 36, 0.8);
+  1642→}
+  1643→
+  1644→.faq-icon {
+  1645→  flex-shrink: 0;
+  1646→  width: 20px;
+  1647→  height: 20px;
+  1648→  position: relative;
+  1649→  transition: transform 0.3s;
+  1650→}
+  1651→
+  1652→.faq-item.open .faq-icon {
+  1653→  transform: rotate(45deg);
+  1654→}
+  1655→
+  1656→.faq-answer {
+  1657→  max-height: 0;
+  1658→  overflow: hidden;
+  1659→  transition: max-height 0.4s ease, padding 0.4s ease;
+  1660→  padding: 0 24px;
+  1661→  background: var(--bg-card);
+  1662→}
+  1663→
+  1664→.faq-item.open .faq-answer {
+  1665→  max-height: 300px;
+  1666→  padding: 0 24px 20px;
+  1667→}
+  1668→
+  1669→.faq-answer p {
+  1670→  font-family: var(--sans);
+  1671→  font-size: 15px;
+  1672→  color: var(--text-secondary);
+  1673→  line-height: 1.7;
+  1674→}
+  1675→
+  1676→/* ============================================
+  1677→   11. FINAL VERDICT — CTA
+  1678→   ============================================ */
+  1679→.cta-section {
+  1680→  padding: 120px 24px;
+  1681→  text-align: center;
+  1682→  position: relative;
+  1683→  overflow: hidden;
+  1684→  background:
+  1685→    radial-gradient(ellipse at center, rgba(212, 160, 64, 0.08) 0%, transparent 60%),
+  1686→    var(--bg-dark);
+  1687→}
+  1688→
+  1689→.cta-section::after {
+  1690→  content: '';
+  1691→  position: absolute;
+  1692→  bottom: 0;
+  1693→  left: 0;
+  1694→  right: 0;
+  1695→  height: 8px;
+  1696→  background: repeating-linear-gradient(
+  1697→    -45deg,
+  1698→    var(--amber),
+  1699→    var(--amber) 14px,
+  1700→    var(--bg-dark) 14px,
+  1701→    var(--bg-dark) 28px
+  1702→  );
+  1703→  background-size: 56px 56px;
+  1704→  animation: policeLine 2s linear infinite;
+  1705→}
+  1706→
+  1707→.cta-headline {
+  1708→  font-family: var(--mono);
+  1709→  font-size: 44px;
+  1710→  font-weight: 700;
+  1711→  letter-spacing: 0.02em;
+  1712→  line-height: 1.2;
+  1713→  margin-bottom: 20px;
+  1714→  color: var(--text-primary);
+  1715→}
+  1716→
+  1717→.cta-sub {
+  1718→  font-family: var(--sans);
+  1719→  font-size: 18px;
+  1720→  color: var(--text-secondary);
+  1721→  margin-bottom: 36px;
+  1722→  max-width: 520px;
+  1723→  margin-left: auto;
+  1724→  margin-right: auto;
+  1725→  line-height: 1.6;
+  1726→}
+  1727→
+  1728→.cta-note {
+  1729→  font-family: var(--mono);
+  1730→  font-size: 12px;
+  1731→  color: var(--text-dim);
+  1732→  margin-top: 16px;
+  1733→  letter-spacing: 0.03em;
+  1734→}
+  1735→
+  1736→/* ============================================
+  1737→   12. FOOTER
+  1738→   ============================================ */
+  1739→.footer {
+  1740→  padding: 48px 24px;
+  1741→  border-top: 2px solid var(--amber-dim);
+  1742→  background: var(--bg-dark);
+  1743→  position: relative;
+  1744→}
+  1745→
+  1746→.footer-stamp {
+  1747→  position: absolute;
+  1748→  top: 20px;
+  1749→  right: 40px;
+  1750→  font-family: var(--mono);
+  1751→  font-size: 14px;
+  1752→  font-weight: 900;
+  1753→  letter-spacing: 0.15em;
+  1754→  text-transform: uppercase;
+  1755→  color: var(--text-dim);
+  1756→  border: 3px solid var(--text-dim);
+  1757→  padding: 6px 20px;
+  1758→  transform: rotate(-6deg);
+  1759→  opacity: 0.5;
+  1760→}
+  1761→
+  1762→.footer-inner {
+  1763→  max-width: 1200px;
+  1764→  margin: 0 auto;
+  1765→  display: flex;
+  1766→  align-items: center;
+  1767→  justify-content: space-between;
+  1768→  flex-wrap: wrap;
+  1769→  gap: 24px;
+  1770→}
+  1771→
+  1772→.footer-logo {
+  1773→  display: flex;
+  1774→  align-items: center;
+  1775→  gap: 8px;
+  1776→  font-family: var(--mono);
+  1777→  font-weight: 700;
+  1778→  font-size: 16px;
+  1779→  color: var(--text-primary);
+  1780→  text-decoration: none;
+  1781→}
+  1782→
+  1783→.footer-logo svg {
+  1784→  width: 18px;
+  1785→  height: 18px;
+  1786→}
+  1787→
+  1788→.footer-links {
+  1789→  display: flex;
+  1790→  gap: 24px;
+  1791→  list-style: none;
+  1792→}
+  1793→
+  1794→.footer-links a {
+  1795→  font-family: var(--mono);
+  1796→  font-size: 12px;
+  1797→  letter-spacing: 0.06em;
+  1798→  text-transform: uppercase;
+  1799→  color: var(--text-secondary);
+  1800→  text-decoration: none;
+  1801→  transition: color 0.2s;
+  1802→}
+  1803→
+  1804→.footer-links a:hover {
+  1805→  color: var(--text-primary);
+  1806→}
+  1807→
+  1808→.footer-credit {
+  1809→  font-family: var(--sans);
+  1810→  font-size: 13px;
+  1811→  color: var(--text-dim);
+  1812→}
+  1813→
+  1814→/* ============================================
+  1815→   RESPONSIVE
+  1816→   ============================================ */
+  1817→@media (max-width: 1024px) {
+  1818→  .investigation-grid {
+  1819→    grid-template-columns: repeat(2, 1fr);
+  1820→  }
+  1821→  .features-grid {
+  1822→    grid-template-columns: repeat(2, 1fr);
+  1823→  }
+  1824→  .verdict-grid {
+  1825→    grid-template-columns: 1fr;
+  1826→    gap: 40px;
+  1827→  }
+  1828→  .pricing-grid {
+  1829→    grid-template-columns: 1fr;
+  1830→    max-width: 440px;
+  1831→    margin: 0 auto;
+  1832→  }
+  1833→}
+  1834→
+  1835→@media (max-width: 768px) {
+  1836→  .nav-links {
+  1837→    display: none;
+  1838→  }
+  1839→  .nav-mobile-toggle {
+  1840→    display: block;
+  1841→  }
+  1842→  .hero-headline {
+  1843→    font-size: 32px;
+  1844→  }
+  1845→  .hero-sub {
+  1846→    font-size: 16px;
+  1847→  }
+  1848→  .evidence-board {
+  1849→    height: auto;
+  1850→    display: flex;
+  1851→    flex-direction: column;
+  1852→    align-items: center;
+  1853→    gap: 20px;
+  1854→    padding: 40px 0;
+  1855→  }
+  1856→  .evidence-card {
+  1857→    position: relative;
+  1858→    top: auto !important;
+  1859→    left: auto !important;
+  1860→    right: auto !important;
+  1861→    transform: none !important;
+  1862→    margin-left: 0 !important;
+  1863→    width: 280px;
+  1864→  }
+  1865→  .red-strings {
+  1866→    display: none;
+  1867→  }
+  1868→  .stats-grid {
+  1869→    grid-template-columns: 1fr;
+  1870→    gap: 16px;
+  1871→  }
+  1872→  .investigation-grid {
+  1873→    grid-template-columns: 1fr;
+  1874→  }
+  1875→  .suspects-grid {
+  1876→    grid-template-columns: 1fr;
+  1877→  }
+  1878→  .features-grid {
+  1879→    grid-template-columns: 1fr;
+  1880→  }
+  1881→  .cta-headline {
+  1882→    font-size: 28px;
+  1883→  }
+  1884→  .footer-inner {
+  1885→    flex-direction: column;
+  1886→    text-align: center;
+  1887→  }
+  1888→  .footer-stamp {
+  1889→    position: relative;
+  1890→    top: auto;
+  1891→    right: auto;
+  1892→    transform: none;
+  1893→    margin-bottom: 24px;
+  1894→  }
+  1895→  .code-block-wrap {
+  1896→    overflow-x: auto;
+  1897→  }
+  1898→}
+  1899→
+  1900→.hidden-mobile {
+  1901→  display: block;
+  1902→}
+  1903→
+  1904→@media (max-width: 768px) {
+  1905→  .hidden-mobile {
+  1906→    display: none;
+  1907→  }
+  1908→}
+  1909→
+  1910→@media (max-width: 480px) {
+  1911→  .hero-headline {
+  1912→    font-size: 26px;
+  1913→  }
+  1914→  .stat-number {
+  1915→    font-size: 36px;
+  1916→  }
+  1917→  .hero-ctas {
+  1918→    flex-direction: column;
+  1919→    align-items: center;
+  1920→  }
+  1921→}
+  1922→</style>
+  1923→</head>
+  1924→<body>
+  1925→
+  1926→<!-- ============================================
+  1927→     1. NAVIGATION
+  1928→     ============================================ -->
+  1929→<nav class="nav" id="nav">
+  1930→  <div class="nav-inner">
+  1931→    <a href="#" class="nav-logo">
+  1932→      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="20" height="20">
+  1933→        <circle cx="11" cy="11" r="8"/>
+  1934→        <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+  1935→      </svg>
+  1936→      POLY
+  1937→    </a>
+  1938→    <ul class="nav-links">
+  1939→      <li><a href="#cases">Cases</a></li>
+  1940→      <li><a href="#investigation">Investigation</a></li>
+  1941→      <li><a href="#verdict">Verdict</a></li>
+  1942→      <li><a href="#dossiers">Dossiers</a></li>
+  1943→      <li><a href="#setup" class="nav-cta">Open Case</a></li>
+  1944→    </ul>
+  1945→    <button class="nav-mobile-toggle" id="mobileToggle" aria-label="Toggle menu">
+  1946→      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+  1947→        <line x1="3" y1="6" x2="21" y2="6"/>
+  1948→        <line x1="3" y1="12" x2="21" y2="12"/>
+  1949→        <line x1="3" y1="18" x2="21" y2="18"/>
+  1950→      </svg>
+  1951→    </button>
+  1952→  </div>
+  1953→  <div class="mobile-menu" id="mobileMenu">
+  1954→    <a href="#cases">Cases</a>
+  1955→    <a href="#investigation">Investigation</a>
+  1956→    <a href="#verdict">Verdict</a>
+  1957→    <a href="#dossiers">Dossiers</a>
+  1958→    <a href="#setup">Open Case</a>
+  1959→  </div>
+  1960→</nav>
+  1961→
+  1962→<!-- ============================================
+  1963→     2. HERO SECTION — THE CRIME SCENE
+  1964→     ============================================ -->
+  1965→<section class="hero" id="hero">
+  1966→  <div class="hero-content">
+  1967→    <h1 class="hero-headline">
+  1968→      <span id="heroTypewriter"></span><span class="typewriter-cursor"></span>
+  1969→    </h1>
+  1970→    <p class="hero-sub">
+  1971→      Every flaky test is a suspect. Poly investigates, gathers evidence, and delivers the verdict.
+  1972→    </p>
+  1973→    <div class="hero-ctas">
+  1974→      <a href="#setup" class="btn-primary">
+  1975→        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 21l-5.2-5.2"/><circle cx="10" cy="10" r="7"/></svg>
+  1976→        Open Investigation
+  1977→      </a>
+  1978→      <a href="https://github.com/Pritahi/poly-core" class="btn-secondary">
+  1979→        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/></svg>
+  1980→        View on GitHub
+  1981→      </a>
+  1982→    </div>
+  1983→  </div>
+  1984→
+  1985→  <!-- Evidence Cards Board -->
+  1986→  <div class="evidence-board" id="evidenceBoard">
+  1987→    <!-- SVG Red Strings Overlay -->
+  1988→    <svg class="red-strings" id="redStrings" viewBox="0 0 900 340">
+  1989→      <path class="red-string" d="M 140 80 Q 300 20 450 60" />
+  1990→      <path class="red-string" d="M 450 60 Q 600 100 740 90" />
+  1991→      <path class="red-string" d="M 260 220 Q 450 180 650 240" />
+  1992→      <!-- Connection dots -->
+  1993→      <circle class="red-dot" cx="140" cy="80" r="4" />
+  1994→      <circle class="red-dot" cx="450" cy="60" r="4" />
+  1995→      <circle class="red-dot" cx="740" cy="90" r="4" />
+  1996→      <circle class="red-dot" cx="260" cy="220" r="4" />
+  1997→      <circle class="red-dot" cx="650" cy="240" r="4" />
+  1998→    </svg>
+  1999→
+  2000→    <!-- Card 1: Suspect -->
+
+[showing lines 1-2000 of 3102; use offset=2001 with limit to continue reading]

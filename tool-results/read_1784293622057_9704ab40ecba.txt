@@ -1,0 +1,1116 @@
+     1→"""
+     2→Poly — AI Flaky Test Trust Layer
+     3→Core Trust Engine v2.0: Production-ready flaky detection with Bayesian scoring,
+     4→z-score anomaly detection, environment tracking, and sequential analysis.
+     5→"""
+     6→
+     7→import xml.etree.ElementTree as ET
+     8→import sqlite3
+     9→import json
+    10→import hashlib
+    11→import time
+    12→import math
+    13→import os
+    14→import secrets
+    15→from datetime import datetime, timezone
+    16→from collections import Counter, defaultdict
+    17→from typing import Optional
+    18→
+    19→
+    20→# Vercel serverless: use /tmp (writable). Local: use backend/poly.db
+    21→_vercel = os.environ.get("VERCEL", "") == "1"
+    22→_default_db = os.path.join("/tmp", "poly.db") if _vercel else os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "backend", "poly.db")
+    23→DB_PATH = os.environ.get("POLY_DB_PATH", _default_db)
+    24→
+    25→
+    26→def _get_db():
+    27→    conn = sqlite3.connect(DB_PATH, timeout=10)
+    28→    conn.row_factory = sqlite3.Row
+    29→    return conn
+    30→
+    31→
+    32→def _init_db():
+    33→    conn = _get_db()
+    34→    c = conn.cursor()
+    35→    c.executescript("""
+    36→        CREATE TABLE IF NOT EXISTS repositories (
+    37→            id INTEGER PRIMARY KEY AUTOINCREMENT,
+    38→            name TEXT NOT NULL UNIQUE,
+    39→            created_at TEXT DEFAULT (datetime('now'))
+    40→        );
+    41→        CREATE TABLE IF NOT EXISTS test_results (
+    42→            id INTEGER PRIMARY KEY AUTOINCREMENT,
+    43→            repo_id INTEGER NOT NULL,
+    44→            test_name TEXT NOT NULL,
+    45→            status TEXT NOT NULL,
+    46→            duration REAL,
+    47→            error_message TEXT,
+    48→            error_type TEXT,
+    49→            flaky_category TEXT,
+    50→            run_id TEXT NOT NULL,
+    51→            run_timestamp TEXT NOT NULL,
+    52→            trust_score REAL DEFAULT 100,
+    53→            score_confidence REAL DEFAULT 0,
+    54→            environment TEXT,
+    55→            FOREIGN KEY (repo_id) REFERENCES repositories(id)
+    56→        );
+    57→        CREATE TABLE IF NOT EXISTS ci_runs (
+    58→            id INTEGER PRIMARY KEY AUTOINCREMENT,
+    59→            repo_id INTEGER NOT NULL,
+    60→            run_id TEXT NOT NULL UNIQUE,
+    61→            branch TEXT DEFAULT 'main',
+    62→            commit_sha TEXT,
+    63→            total_tests INTEGER DEFAULT 0,
+    64→            passed INTEGER DEFAULT 0,
+    65→            failed INTEGER DEFAULT 0,
+    66→            skipped INTEGER DEFAULT 0,
+    67→            avg_trust_score REAL DEFAULT 100,
+    68→            timestamp TEXT NOT NULL,
+    69→            environment TEXT,
+    70→            FOREIGN KEY (repo_id) REFERENCES repositories(id)
+    71→        );
+    72→        CREATE TABLE IF NOT EXISTS alerts_config (
+    73→            id INTEGER PRIMARY KEY AUTOINCREMENT,
+    74→            repo_id INTEGER NOT NULL UNIQUE,
+    75→            webhook_url TEXT,
+    76→            channel_type TEXT DEFAULT 'discord',
+    77→            min_trust_drop REAL DEFAULT 20,
+    78→            alert_on_flaky BOOLEAN DEFAULT 1,
+    79→            alert_on_quarantine BOOLEAN DEFAULT 1,
+    80→            FOREIGN KEY (repo_id) REFERENCES repositories(id)
+    81→        );
+    82→        CREATE INDEX IF NOT EXISTS idx_test_results_repo ON test_results(repo_id);
+    83→        CREATE INDEX IF NOT EXISTS idx_test_results_name ON test_results(test_name);
+    84→        CREATE INDEX IF NOT EXISTS idx_test_results_run ON test_results(run_id);
+    85→        CREATE INDEX IF NOT EXISTS idx_ci_runs_repo ON ci_runs(repo_id);
+    86→
+    87→        -- Admin / Users
+    88→        CREATE TABLE IF NOT EXISTS admin_users (
+    89→            id INTEGER PRIMARY KEY AUTOINCREMENT,
+    90→            username TEXT NOT NULL UNIQUE,
+    91→            password_hash TEXT NOT NULL,
+    92→            role TEXT DEFAULT 'admin',
+    93→            created_at TEXT DEFAULT (datetime('now'))
+    94→        );
+    95→        CREATE TABLE IF NOT EXISTS users (
+    96→            id INTEGER PRIMARY KEY AUTOINCREMENT,
+    97→            name TEXT,
+    98→            email TEXT UNIQUE,
+    99→            github_username TEXT,
+   100→            api_key TEXT UNIQUE,
+   101→            plan TEXT DEFAULT 'free',
+   102→            referrer TEXT,
+   103→            signup_source TEXT,
+   104→            ip_address TEXT,
+   105→            is_active INTEGER DEFAULT 1,
+   106→            last_activity TEXT,
+   107→            created_at TEXT DEFAULT (datetime('now')),
+   108→            notes TEXT
+   109→        );
+   110→        CREATE TABLE IF NOT EXISTS user_activity (
+   111→            id INTEGER PRIMARY KEY AUTOINCREMENT,
+   112→            user_id INTEGER,
+   113→            action TEXT NOT NULL,
+   114→            detail TEXT,
+   115→            ip_address TEXT,
+   116→            created_at TEXT DEFAULT (datetime('now')),
+   117→            FOREIGN KEY (user_id) REFERENCES users(id)
+   118→        );
+   119→        CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+   120→        CREATE INDEX IF NOT EXISTS idx_users_activity ON user_activity(user_id);
+   121→    """)
+   122→    # Seed default admin if empty
+   123→    c.execute("SELECT COUNT(*) as cnt FROM admin_users")
+   124→    if c.fetchone()["cnt"] == 0:
+   125→        import hashlib
+   126→        c.execute("INSERT INTO admin_users (username, password_hash, role) VALUES (?,?,?)",
+   127→                   ("admin", hashlib.sha256("admin123".encode()).hexdigest(), "superadmin"))
+   128→    conn.commit()
+   129→    conn.close()
+   130→
+   131→
+   132→def _test_hash(test_name, repo_name):
+   133→    return hashlib.sha256(f"{repo_name}:{test_name}".encode()).hexdigest()[:16]
+   134→
+   135→
+   136→# ─────────────────────────────────────────────
+   137→# JUnit XML Parsing
+   138→# ─────────────────────────────────────────────
+   139→
+   140→def parse_junit_xml(xml_content: str) -> dict:
+   141→    """Parse JUnit XML and extract test results."""
+   142→    results = {"tests": [], "total": 0, "passed": 0, "failed": 0, "skipped": 0, "duration": 0}
+   143→    try:
+   144→        root = ET.fromstring(xml_content)
+   145→    except ET.ParseError:
+   146→        return results
+   147→
+   148→    for testsuite in root.iter("testsuite"):
+   149→        for testcase in testsuite.iter("testcase"):
+   150→            name = testcase.get("name", "unknown")
+   151→            classname = testcase.get("classname", "")
+   152→            full_name = f"{classname}.{name}" if classname else name
+   153→            duration = float(testcase.get("time", 0))
+   154→            results["duration"] += duration
+   155→            results["total"] += 1
+   156→
+   157→            status = "passed"
+   158→            error_message = ""
+   159→            error_type = ""
+   160→
+   161→            failure = testcase.find("failure")
+   162→            error = testcase.find("error")
+   163→            skipped = testcase.find("skipped")
+   164→
+   165→            if failure is not None:
+   166→                status = "failed"
+   167→                error_message = (failure.get("message", "") or failure.text or "")[:500]
+   168→                error_type = "failure"
+   169→            elif error is not None:
+   170→                status = "failed"
+   171→                error_message = (error.get("message", "") or error.text or "")[:500]
+   172→                error_type = "error"
+   173→            elif skipped is not None:
+   174→                status = "skipped"
+   175→
+   176→            if status == "passed":
+   177→                results["passed"] += 1
+   178→            elif status == "failed":
+   179→                results["failed"] += 1
+   180→            else:
+   181→                results["skipped"] += 1
+   182→
+   183→            results["tests"].append({
+   184→                "name": full_name,
+   185→                "status": status,
+   186→                "duration": duration,
+   187→                "error_message": error_message,
+   188→                "error_type": error_type,
+   189→            })
+   190→
+   191→    return results
+   192→
+   193→
+   194→def _get_test_history(conn, repo_id, test_name, limit=50):
+   195→    c = conn.cursor()
+   196→    c.execute(
+   197→        "SELECT status, duration, error_message, run_timestamp, trust_score, environment "
+   198→        "FROM test_results WHERE repo_id=? AND test_name=? "
+   199→        "ORDER BY run_timestamp DESC LIMIT ?",
+   200→        (repo_id, test_name, limit)
+   201→    )
+   202→    return c.fetchall()
+   203→
+   204→
+   205→# ─────────────────────────────────────────────
+   206→# Bayesian Pass Rate (Beta Distribution)
+   207→# ─────────────────────────────────────────────
+   208→
+   209→def _beta_pdf(x, alpha, beta_param):
+   210→    """Approximate Beta PDF value (log-space for numerical stability)."""
+   211→    if x <= 0 or x >= 1:
+   212→        return 0.0
+   213→    # log(B(alpha, beta)) = log(Gamma(alpha)) + log(Gamma(beta)) - log(Gamma(alpha+beta))
+   214→    # Using Stirling's approximation for ln(Gamma)
+   215→    def ln_gamma(z):
+   216→        if z < 0.5:
+   217→            return math.log(math.pi / math.sin(math.pi * z)) - ln_gamma(1 - z)
+   218→        z -= 1
+   219→        g = 0.99999999999980993 + (
+   220→            676.5203681218851 / (z + 1) - 1259.1392167224028 / (z + 2) +
+   221→            771.32342877765313 / (z + 3) - 176.61502916214059 / (z + 4) +
+   222→            12.507343278686905 / (z + 5) - 0.13857109526572012 / (z + 6) +
+   223→            9.9843695780195716e-6 / (z + 7) + 1.5056327351493116e-7 / (z + 8)
+   224→        )
+   225→        return 0.5 * math.log(2 * math.pi) + (z + 0.5) * math.log(z + 7.5) - (z + 7.5) + math.log(g)
+   226→
+   227→    log_beta = ln_gamma(alpha) + ln_gamma(beta_param) - ln_gamma(alpha + beta_param)
+   228→    log_pdf = (alpha - 1) * math.log(x) + (beta_param - 1) * math.log(1 - x) - log_beta
+   229→    return math.exp(log_pdf)
+   230→
+   231→
+   232→def calculate_bayesian_pass_rate(history, prior_alpha=2.0, prior_beta=2.0):
+   233→    """
+   234→    Bayesian pass rate using Beta-Binomial conjugate prior.
+   235→    
+   236→    Instead of naive pass/total, we use:
+   237→    - Prior: Beta(2, 2) — slight bias toward stability (most tests should pass)
+   238→    - Posterior: Beta(2 + passes, 2 + failures)
+   239→    - MAP estimate: (alpha - 1) / (alpha + beta - 2)
+   240→    
+   241→    This means:
+   242→    - 0/0 runs → 50% (prior mean) instead of undefined
+   243→    - 1/1 run → 60% (pulled toward prior) instead of 100%
+   244→    - 10/10 runs → 92% (prior has less influence with more data)
+   245→    - 5/10 runs → 46% (properly uncertain)
+   246→    """
+   247→    if not history:
+   248→        return 0.5  # Prior mean
+   249→
+   250→    passed = sum(1 for h in history if h["status"] == "passed")
+   251→    failed = len(history) - passed
+   252→
+   253→    alpha = prior_alpha + passed
+   254→    beta_p = prior_beta + failed
+   255→
+   256→    # MAP estimate of Beta distribution
+   257→    if alpha + beta_p > 2:
+   258→        map_estimate = (alpha - 1) / (alpha + beta_p - 2)
+   259→    else:
+   260→        map_estimate = alpha / (alpha + beta_p)
+   261→
+   262→    return max(0.0, min(1.0, map_estimate))
+   263→
+   264→
+   265→def calculate_score_confidence(history, prior_alpha=2.0, prior_beta=2.0):
+   266→    """
+   267→    Calculate confidence in the trust score based on sample size.
+   268→    Uses variance of the Beta posterior distribution.
+   269→    
+   270→    More runs = higher confidence = we trust the score more.
+   271→    Fewer runs = lower confidence = score is more uncertain.
+   272→    
+   273→    Returns 0.0 to 1.0
+   274→    """
+   275→    if not history:
+   276→        return 0.0
+   277→
+   278→    passed = sum(1 for h in history if h["status"] == "passed")
+   279→    failed = len(history) - passed
+   280→
+   281→    alpha = prior_alpha + passed
+   282→    beta_p = prior_beta + failed
+   283→
+   284→    # Variance of Beta distribution
+   285→    n = alpha + beta_p
+   286→    if n <= 0:
+   287→        return 0.0
+   288→
+   289→    variance = (alpha * beta_p) / (n * n * (n + 1))
+   290→
+   291→    # Standard deviation
+   292→    std = math.sqrt(variance)
+   293→
+   294→    # Convert to confidence (lower std = higher confidence)
+   295→    # std of Beta(2,2) is ~0.195 → confidence ~0.3
+   296→    # std of Beta(20,2) is ~0.084 → confidence ~0.7
+   297→    # std of Beta(100,10) is ~0.038 → confidence ~0.9
+   298→    confidence = max(0.0, min(1.0, 1.0 - std * 3.5))
+   299→
+   300→    return round(confidence, 3)
+   301→
+   302→
+   303→# ─────────────────────────────────────────────
+   304→# Wilson Score Interval (for pass rate CI)
+   305→# ─────────────────────────────────────────────
+   306→
+   307→def wilson_score_interval(history, confidence=0.95):
+   308→    """
+   309→    Wilson score interval — better than normal approximation for proportions.
+   310→    Returns (lower_bound, upper_bound, point_estimate).
+   311→    """
+   312→    if not history:
+   313→        return (0.25, 0.75, 0.5)
+   314→
+   315→    n = len(history)
+   316→    p_hat = sum(1 for h in history if h["status"] == "passed") / n
+   317→
+   318→    z = 1.96  # 95% confidence
+   319→    denom = 1 + z * z / n
+   320→    center = (p_hat + z * z / (2 * n)) / denom
+   321→    margin = z * math.sqrt((p_hat * (1 - p_hat) + z * z / (4 * n)) / n) / denom
+   322→
+   323→    lower = max(0.0, center - margin)
+   324→    upper = min(1.0, center + margin)
+   325→
+   326→    return (round(lower, 4), round(upper, 4), round(p_hat, 4))
+   327→
+   328→
+   329→# ─────────────────────────────────────────────
+   330→# Z-Score Anomaly Detection (Duration)
+   331→# ─────────────────────────────────────────────
+   332→
+   333→def calculate_duration_variance(history):
+   334→    """Coefficient of variation of test durations."""
+   335→    if len(history) < 3:
+   336→        return 0.0
+   337→    durations = [h["duration"] for h in history if h["duration"] and h["duration"] > 0]
+   338→    if len(durations) < 3:
+   339→        return 0.0
+   340→    mean = sum(durations) / len(durations)
+   341→    variance = sum((d - mean) ** 2 for d in durations) / len(durations)
+   342→    std = math.sqrt(variance)
+   343→    cv = std / mean if mean > 0 else 0
+   344→    return min(cv * 100, 100)
+   345→
+   346→
+   347→def calculate_duration_zscores(history):
+   348→    """
+   349→    Calculate z-scores for each duration to detect outliers.
+   350→    Returns list of (duration, z_score, is_anomaly) tuples.
+   351→    An anomaly = |z_score| > 2.0 (outside 95% of distribution).
+   352→    """
+   353→    durations = [h["duration"] for h in history if h["duration"] and h["duration"] > 0]
+   354→    if len(durations) < 3:
+   355→        return []
+   356→
+   357→    mean = sum(durations) / len(durations)
+   358→    variance = sum((d - mean) ** 2 for d in durations) / len(durations)
+   359→    std = math.sqrt(variance)
+   360→
+   361→    if std == 0:
+   362→        return [(d, 0.0, False) for d in durations]
+   363→
+   364→    results = []
+   365→    for d in durations:
+   366→        z = (d - mean) / std
+   367→        is_anomaly = abs(z) > 2.0
+   368→        results.append((d, round(z, 2), is_anomaly))
+   369→
+   370→    return results
+   371→
+   372→
+   373→def duration_anomaly_rate(history):
+   374→    """
+   375→    What fraction of runs have anomalous durations (|z| > 2).
+   376→    High rate = timing is very inconsistent = likely flaky due to race conditions.
+   377→    """
+   378→    zscores = calculate_duration_zscores(history)
+   379→    if not zscores:
+   380→        return 0.0
+   381→    anomalies = sum(1 for _, _, is_anom in zscores if is_anom)
+   382→    return anomalies / len(zscores)
+   383→
+   384→
+   385→# ─────────────────────────────────────────────
+   386→# Recent Trend Analysis (Improved)
+   387→# ─────────────────────────────────────────────
+   388→
+   389→def calculate_recent_trend(history, window=5):
+   390→    """
+   391→    Compare recent pass rate vs older pass rate.
+   392→    Returns -100 to +100. Positive = improving, negative = degrading.
+   393→    
+   394→    Improved: Uses Bayesian pass rate for each window for stability.
+   395→    """
+   396→    if len(history) < window + 2:
+   397→        return 0.0
+   398→
+   399→    recent = history[:window]
+   400→    older = history[window:2 * window]
+   401→
+   402→    if not older:
+   403→        return 0.0
+   404→
+   405→    recent_rate = calculate_bayesian_pass_rate(recent)
+   406→    older_rate = calculate_bayesian_pass_rate(older)
+   407→
+   408→    return (recent_rate - older_rate) * 100
+   409→
+   410→
+   411→# ─────────────────────────────────────────────
+   412→# Error Pattern Analysis (Improved)
+   413→# ─────────────────────────────────────────────
+   414→
+   415→def calculate_error_pattern(history):
+   416→    """
+   417→    How consistent are error messages when the test fails.
+   418→    High consistency = same error every time = might be a real bug, not flaky.
+   419→    Low consistency = different errors = likely non-deterministic / flaky.
+   420→    
+   421→    Returns 0-100 where 100 = perfectly consistent errors.
+   422→    """
+   423→    if not history:
+   424→        return 0.0
+   425→
+   426→    errors = [h["error_message"] for h in history if h["status"] == "failed" and h["error_message"]]
+   427→    if len(errors) < 2:
+   428→        return 0.0
+   429→
+   430→    # Normalize error messages: strip whitespace, lowercase, remove line numbers
+   431→    def normalize(err):
+   432→        import re
+   433→        err = err.strip().lower()
+   434→        # Remove common variable parts like line numbers, file paths
+   435→        err = re.sub(r'line \d+', 'line N', err)
+   436→        err = re.sub(r'at .+:\d+', 'at FILE:LINE', err)
+   437→        err = re.sub(r'0x[0-9a-f]+', '0xADDR', err)
+   438→        return err
+   439→
+   440→    normalized = [normalize(e) for e in errors]
+   441→    error_hashes = [hashlib.md5(e.encode()).hexdigest() for e in normalized]
+   442→    counter = Counter(error_hashes)
+   443→    most_common_ratio = counter.most_common(1)[0][1] / len(error_hashes)
+   444→
+   445→    return most_common_ratio * 100
+   446→
+   447→
+   448→def get_unique_error_patterns(history, top_n=5):
+   449→    """Extract the top N unique error patterns with frequencies."""
+   450→    if not history:
+   451→        return []
+   452→
+   453→    errors = [h["error_message"] for h in history if h["status"] == "failed" and h["error_message"]]
+   454→    if not errors:
+   455→        return []
+   456→
+   457→    def normalize(err):
+   458→        import re
+   459→        err = err.strip().lower()
+   460→        err = re.sub(r'line \d+', 'line N', err)
+   461→        err = re.sub(r'at .+:\d+', 'at FILE:LINE', err)
+   462→        err = re.sub(r'0x[0-9a-f]+', '0xADDR', err)
+   463→        return err
+   464→
+   465→    pattern_counts = Counter()
+   466→    pattern_examples = {}
+   467→    for e in errors:
+   468→        norm = normalize(e)
+   469→        pattern_counts[norm] += 1
+   470→        if norm not in pattern_examples:
+   471→            pattern_examples[norm] = e[:200]
+   472→
+   473→    return [
+   474→        {"pattern": pattern_examples[p], "normalized": p, "count": c, "percentage": round(c / len(errors) * 100, 1)}
+   475→        for p, c in pattern_counts.most_common(top_n)
+   476→    ]
+   477→
+   478→
+   479→# ─────────────────────────────────────────────
+   480→# Sequential Pattern Detection
+   481→# ─────────────────────────────────────────────
+   482→
+   483→def detect_sequential_pattern(history):
+   484→    """
+   485→    Detect if pass/fail follows a sequential pattern (alternating, periodic, etc.).
+   486→    Returns pattern type or None.
+   487→    
+   488→    Checks for:
+   489→    - Alternating: P-F-P-F or F-P-F-P
+   490→    - Periodic: P-P-F-P-P-F (regular interval failures)
+   491→    - Clustered: P-P-P-F-F-F (sudden shift in behavior)
+   492→    """
+   493→    if len(history) < 6:
+   494→        return None
+   495→
+   496→    statuses = [1 if h["status"] == "passed" else 0 for h in history]
+   497→    n = len(statuses)
+   498→
+   499→    # Alternating check
+   500→    transitions = sum(1 for i in range(n - 1) if statuses[i] != statuses[i + 1])
+   501→    transition_rate = transitions / (n - 1)
+   502→
+   503→    if transition_rate > 0.7:
+   504→        return "alternating"
+   505→
+   506→    # Clustered check (runs test - Wald-Wolfowitz)
+   507→    runs = 1
+   508→    for i in range(1, n):
+   509→        if statuses[i] != statuses[i - 1]:
+   510→            runs += 1
+   511→
+   512→    expected_runs = 1 + (2 * sum(statuses) * (n - sum(statuses))) / n
+   513→    if n > 1:
+   514→        runs_variance = (2 * sum(statuses) * (n - sum(statuses)) * (2 * sum(statuses) * (n - sum(statuses)) - n)) / (n * n * (n - 1))
+   515→        if runs_variance > 0:
+   516→            z = (runs - expected_runs) / math.sqrt(runs_variance)
+   517→            if z < -1.96:  # Fewer runs than expected = clustered
+   518→                return "clustered"
+   519→
+   520→    # Periodic check (autocorrelation at lag 2, 3, 4, 5)
+   521→    mean_s = sum(statuses) / n
+   522→    if mean_s == 0 or mean_s == 1:
+   523→        return None
+   524→
+   525→    variance = sum((s - mean_s) ** 2 for s in statuses) / n
+   526→    if variance == 0:
+   527→        return None
+   528→
+   529→    for lag in range(2, min(6, n // 2)):
+   530→        autocorr = sum((statuses[i] - mean_s) * (statuses[i + lag] - mean_s) for i in range(n - lag)) / (n * variance)
+   531→        if autocorr > 0.5:
+   532→            return f"periodic_{lag}"
+   533→
+   534→    return None
+   535→
+   536→
+   537→# ─────────────────────────────────────────────
+   538→# Environment-Aware Analysis
+   539→# ─────────────────────────────────────────────
+   540→
+   541→def analyze_environment_correlation(history):
+   542→    """
+   543→    Check if test outcomes correlate with specific environments.
+   544→    Returns dict with environment-specific pass rates if significant difference found.
+   545→    """
+   546→    env_groups = defaultdict(lambda: {"passed": 0, "total": 0, "durations": []})
+   547→
+   548→    for h in history:
+   549→        env = h.get("environment") or "unknown"
+   550→        env_groups[env]["total"] += 1
+   551→        if h["status"] == "passed":
+   552→            env_groups[env]["passed"] += 1
+   553→        if h["duration"]:
+   554→            env_groups[env]["durations"].append(h["duration"])
+   555→
+   556→    if len(env_groups) < 2:
+   557→        return None
+   558→
+   559→    rates = {}
+   560→    for env, data in env_groups.items():
+   561→        if data["total"] >= 2:
+   562→            rates[env] = {
+   563→                "pass_rate": data["passed"] / data["total"],
+   564→                "runs": data["total"],
+   565→                "avg_duration": sum(data["durations"]) / len(data["durations"]) if data["durations"] else 0,
+   566→            }
+   567→
+   568→    if len(rates) < 2:
+   569→        return None
+   570→
+   571→    # Check if there's significant variance between environments
+   572→    pass_rates = [r["pass_rate"] for r in rates.values()]
+   573→    max_diff = max(pass_rates) - min(pass_rates)
+   574→
+   575→    if max_diff > 0.3:  # 30%+ difference between environments
+   576→        return rates
+   577→
+   578→    return None
+   579→
+   580→
+   581→# ─────────────────────────────────────────────
+   582→# Flaky Category Classification (v2 - Stronger)
+   583→# ─────────────────────────────────────────────
+   584→
+   585→def classify_flaky_category(history, current_result=None):
+   586→    """
+   587→    Classify WHY a test is flaky based on multi-signal analysis.
+   588→    
+   589→    Categories:
+   590→    - timing: High duration variance, outliers detected by z-score
+   591→    - order_dependency: Alternating/periodic pass-fail patterns
+   592→    - shared_state: Consistent errors, clustered pattern
+   593→    - non_deterministic_data: Many different error messages, random failures
+   594→    - environment_specific: Fails only in specific environments
+   595→    
+   596→    v2 improvements:
+   597→    - Works with just 2+ runs (was 3+)
+   598→    - Uses z-score for timing detection
+   599→    - Uses sequential pattern detection
+   600→    - Considers environment correlation
+   601→    - Returns confidence alongside category
+   602→    """
+   603→    if not history or len(history) < 2:
+   604→        return None
+   605→
+   606→    statuses = [h["status"] for h in history]
+   607→    pass_rate = sum(1 for s in statuses if s == "passed") / len(statuses)
+   608→
+   609→    # Not flaky if almost always passes or always fails
+   610→    if pass_rate > 0.92 or pass_rate < 0.08:
+   611→        return None
+   612→
+   613→    durations = [h["duration"] for h in history if h["duration"] and h["duration"] > 0]
+   614→    errors = [h["error_message"] for h in history if h.get("error_message")]
+   615→
+   616→    scores = {}  # category -> confidence score
+   617→
+   618→    # ─── Timing detection (z-score based) ───
+   619→    if len(durations) >= 3:
+   620→        anomaly_rate = duration_anomaly_rate(history)
+   621→        cv = calculate_duration_variance(history) / 100  # normalize to 0-1
+   622→
+   623→        # High CV or high anomaly rate = timing issue
+   624→        timing_score = max(cv * 1.5, anomaly_rate * 2)
+   625→        if timing_score > 0.3:
+   626→            scores["timing"] = min(1.0, timing_score)
+   627→
+   628→    # ─── Sequential pattern detection ───
+   629→    pattern = detect_sequential_pattern(history)
+   630→    if pattern == "alternating":
+   631→        scores["order_dependency"] = 0.85
+   632→    elif pattern == "clustered":
+   633→        scores["shared_state"] = 0.7
+   634→    elif pattern and pattern.startswith("periodic_"):
+   635→        scores["order_dependency"] = 0.6
+   636→
+   637→    # ─── Non-deterministic data detection ───
+   638→    if len(errors) >= 2:
+   639→        unique_errors = len(set(errors))
+   640→        error_ratio = unique_errors / len(errors)
+   641→
+   642→        # Many different errors = non-deterministic
+   643→        if error_ratio > 0.5:
+   644→            scores["non_deterministic_data"] = min(1.0, error_ratio)
+   645→
+   646→    # ─── Shared state detection ───
+   647→    if len(errors) >= 2:
+   648→        error_consistency = calculate_error_pattern(history) / 100
+   649→
+   650→        # Same error but intermittent = shared state corruption
+   651→        if error_consistency > 0.6 and 0.15 < pass_rate < 0.85:
+   652→            shared_score = error_consistency * (1 - abs(pass_rate - 0.5) * 0.5)
+   653→            if "shared_state" not in scores or shared_score > scores.get("shared_state", 0):
+   654→                scores["shared_state"] = shared_score
+   655→
+   656→    # ─── Environment-specific detection ───
+   657→    env_corr = analyze_environment_correlation(history)
+   658→    if env_corr:
+   659→        scores["environment_specific"] = 0.8
+   660→
+   661→    # Pick highest confidence category
+   662→    if not scores:
+   663→        return None
+   664→
+   665→    best_category = max(scores, key=scores.get)
+   666→    return best_category
+   667→
+   668→
+   669→# ─────────────────────────────────────────────
+   670→# Trust Score Calculation (v2 - Production)
+   671→# ─────────────────────────────────────────────
+   672→
+   673→def calculate_trust_score(history):
+   674→    """
+   675→    Calculate 0-100 trust score for a test.
+   676→    
+   677→    Scoring formula (v2):
+   678→    - Bayesian Pass Rate (55% weight) — more robust with small samples
+   679→    - Recent Trend (20% weight) — is it getting better or worse?
+   680→    - Duration Stability (10% weight) — consistent execution time
+   681→    - Error Pattern Score (10% weight) — consistent errors = more trustworthy than random
+   682→    - Flaky Category Penalty (up to -20 points) — based on category severity
+   683→    
+   684→    v2 improvements:
+   685→    - Bayesian pass rate instead of naive ratio
+   686→    - Z-score anomaly detection feeds into duration stability
+   687→    - Sequential pattern analysis for flaky detection
+   688→    - Confidence score returned alongside trust score
+   689→    - Better penalty scaling based on detection confidence
+   690→    """
+   691→    if not history:
+   692→        return 100.0
+   693→
+   694→    # 1. Bayesian Pass Rate (55%)
+   695→    bayesian_rate = calculate_bayesian_pass_rate(history)
+   696→    pass_score = bayesian_rate * 55
+   697→
+   698→    # 2. Recent Trend (20%)
+   699→    trend = calculate_recent_trend(history)
+   700→    # Scale trend: +50 trend = full 20pts, -50 trend = 0pts
+   701→    trend_score = max(0, (50 + trend)) / 100 * 20
+   702→
+   703→    # 3. Duration Stability (10%)
+   704→    duration_var = calculate_duration_variance(history)
+   705→    # Use z-score anomaly rate as additional signal
+   706→    anomaly_rate = duration_anomaly_rate(history)
+   707→    duration_penalty = min(duration_var, 100) * 0.07 + anomaly_rate * 30
+   708→    duration_score = max(0, 10 - duration_penalty)
+   709→
+   710→    # 4. Error Pattern Consistency (10%)
+   711→    error_pattern = calculate_error_pattern(history)
+   712→    # Higher consistency = slightly more trustworthy (we know what the error is)
+   713→    # But very high consistency with failures = real bug, not flaky
+   714→    error_score = (error_pattern / 100) * 10
+   715→
+   716→    # Combine
+   717→    score = pass_score + trend_score + duration_score + error_score
+   718→
+   719→    # 5. Flaky Category Penalty
+   720→    flaky_cat = classify_flaky_category(history, None)
+   721→    if flaky_cat:
+   722→        penalty_map = {
+   723→            "timing": 8,
+   724→            "order_dependency": 12,
+   725→            "shared_state": 15,
+   726→            "non_deterministic_data": 20,
+   727→            "environment_specific": 10,
+   728→        }
+   729→        score -= penalty_map.get(flaky_cat, 10)
+   730→
+   731→    return max(0, min(100, round(score, 1)))
+   732→
+   733→
+   734→def calculate_score_breakdown(history):
+   735→    """
+   736→    Return detailed breakdown of each scoring component.
+   737→    Used by the dashboard's test detail page.
+   738→    """
+   739→    if not history:
+   740→        return {
+   741→            "pass_rate": {"value": 1.0, "weight": 0.55, "points": 55},
+   742→            "recent_trend": {"value": 0, "weight": 0.20, "points": 10},
+   743→            "duration_stability": {"value": 100, "weight": 0.10, "points": 10},
+   744→            "error_consistency": {"value": 0, "weight": 0.10, "points": 0},
+   745→            "flaky_penalty": {"category": None, "penalty": 0},
+   746→            "total": 100.0,
+   747→            "confidence": 0.0,
+   748→            "bayesian_pass_rate": 0.5,
+   749→            "anomaly_rate": 0.0,
+   750→            "error_patterns": [],
+   751→            "sequential_pattern": None,
+   752→        }
+   753→
+   754→    bayesian_rate = calculate_bayesian_pass_rate(history)
+   755→    trend = calculate_recent_trend(history)
+   756→    duration_var = calculate_duration_variance(history)
+   757→    anomaly_rate = duration_anomaly_rate(history)
+   758→    error_pat = calculate_error_pattern(history)
+   759→
+   760→    pass_score = bayesian_rate * 55
+   761→    trend_score = max(0, (50 + trend)) / 100 * 20
+   762→    duration_penalty = min(duration_var, 100) * 0.07 + anomaly_rate * 30
+   763→    duration_score = max(0, 10 - duration_penalty)
+   764→    error_score = (error_pat / 100) * 10
+   765→
+   766→    total = pass_score + trend_score + duration_score + error_score
+   767→
+   768→    flaky_cat = classify_flaky_category(history, None)
+   769→    penalty = 0
+   770→    if flaky_cat:
+   771→        penalty_map = {
+   772→            "timing": 8, "order_dependency": 12, "shared_state": 15,
+   773→            "non_deterministic_data": 20, "environment_specific": 10,
+   774→        }
+   775→        penalty = penalty_map.get(flaky_cat, 10)
+   776→        total -= penalty
+   777→
+   778→    total = max(0, min(100, round(total, 1)))
+   779→    confidence = calculate_score_confidence(history)
+   780→    error_patterns = get_unique_error_patterns(history)
+   781→    seq_pattern = detect_sequential_pattern(history)
+   782→
+   783→    return {
+   784→        "pass_rate": {"value": round(bayesian_rate, 3), "weight": 0.55, "points": round(pass_score, 1)},
+   785→        "recent_trend": {"value": round(trend, 1), "weight": 0.20, "points": round(trend_score, 1)},
+   786→        "duration_stability": {"value": round(100 - duration_var, 1), "weight": 0.10, "points": round(duration_score, 1)},
+   787→        "error_consistency": {"value": round(error_pat, 1), "weight": 0.10, "points": round(error_score, 1)},
+   788→        "flaky_penalty": {"category": flaky_cat, "penalty": penalty},
+   789→        "total": total,
+   790→        "confidence": round(confidence, 3),
+   791→        "bayesian_pass_rate": round(bayesian_rate, 3),
+   792→        "anomaly_rate": round(anomaly_rate, 3),
+   793→        "error_patterns": error_patterns,
+   794→        "sequential_pattern": seq_pattern,
+   795→    }
+   796→
+   797→
+   798→# ─────────────────────────────────────────────
+   799→# Flaky Probability (v2)
+   800→# ─────────────────────────────────────────────
+   801→
+   802→def calculate_flaky_probability(history):
+   803→    """
+   804→    Return 0.0-1.0 probability that a test is flaky (not permanently broken).
+   805→    
+   806→    v2: Uses Bayesian pass rate and multiple signals.
+   807→    - Pass rate near 0 or 1 → not flaky (broken or stable)
+   808→    - Pass rate near 0.5 → high flaky probability
+   809→    - Multiple error patterns → higher flaky probability
+   810→    - Sequential patterns → higher flaky probability
+   811→    - High duration anomaly → higher flaky probability
+   812→    """
+   813→    if not history or len(history) < 2:
+   814→        return 0.0
+   815→
+   816→    bayesian_rate = calculate_bayesian_pass_rate(history)
+   817→
+   818→    # Extreme pass rates = not flaky
+   819→    if bayesian_rate < 0.05:
+   820→        return 0.0  # Broken, not flaky
+   821→    if bayesian_rate > 0.95:
+   822→        return 0.0  # Stable
+   823→
+   824→    # Base probability from distance from 0.5 (most uncertain at 0.5)
+   825→    base_prob = 1.0 - abs(bayesian_rate - 0.5) * 2
+   826→    base_prob = base_prob ** 0.8  # Flatten the curve slightly
+   827→
+   828→    # Error pattern modifier (many different errors = more likely flaky)
+   829→    error_pat = calculate_error_pattern(history) / 100
+   830→    error_modifier = 1.0 + (1.0 - error_pat) * 0.3  # Low consistency = higher probability
+   831→
+   832→    # Sequential pattern modifier
+   833→    seq_pattern = detect_sequential_pattern(history)
+   834→    seq_modifier = 1.0
+   835→    if seq_pattern == "alternating":
+   836→        seq_modifier = 1.3
+   837→    elif seq_pattern == "clustered":
+   838→        seq_modifier = 1.15
+   839→    elif seq_pattern and seq_pattern.startswith("periodic_"):
+   840→        seq_modifier = 1.2
+   841→
+   842→    # Duration anomaly modifier
+   843→    anomaly = duration_anomaly_rate(history)
+   844→    dur_modifier = 1.0 + anomaly * 0.5
+   845→
+   846→    # Confidence: more runs = more certain about flakiness
+   847→    confidence = calculate_score_confidence(history)
+   848→    conf_modifier = 0.5 + confidence * 0.5  # Scale 0.5-1.0
+   849→
+   850→    final_prob = base_prob * error_modifier * seq_modifier * dur_modifier * conf_modifier
+   851→
+   852→    return min(1.0, max(0.0, round(final_prob, 3)))
+   853→
+   854→
+   855→# ─────────────────────────────────────────────
+   856→# Core Processing
+   857→# ─────────────────────────────────────────────
+   858→
+   859→def _ensure_repo(conn, repo_name):
+   860→    c = conn.cursor()
+   861→    c.execute("INSERT OR IGNORE INTO repositories (name) VALUES (?)", (repo_name,))
+   862→    conn.commit()
+   863→    c.execute("SELECT id FROM repositories WHERE name=?", (repo_name,))
+   864→    return c.fetchone()["id"]
+   865→
+   866→
+   867→def process_test_run(xml_content: str, repo_name: str, run_id: str = None,
+   868→                     branch: str = "main", commit_sha: str = None,
+   869→                     environment: str = None) -> dict:
+   870→    """Main entry point: parse XML, calculate scores, store results."""
+   871→    _init_db()
+   872→    conn = _get_db()
+   873→
+   874→    repo_id = _ensure_repo(conn, repo_name)
+   875→    parsed = parse_junit_xml(xml_content)
+   876→
+   877→    if not run_id:
+   878→        run_id = f"run_{int(time.time() * 1000)}_{secrets.token_hex(4)}"
+   879→
+   880→    timestamp = datetime.now(timezone.utc).isoformat()
+   881→    total_trust = 0
+   882→    test_count = 0
+   883→
+   884→    for test in parsed["tests"]:
+   885→        history_rows = _get_test_history(conn, repo_id, test["name"])
+   886→        history = [dict(h) for h in history_rows]
+   887→
+   888→        trust_score = calculate_trust_score(history)
+   889→        confidence = calculate_score_confidence(history)
+   890→        flaky_cat = classify_flaky_category(history, test)
+   891→        flaky_prob = calculate_flaky_probability(history)
+   892→
+   893→        c = conn.cursor()
+   894→        c.execute(
+   895→            "INSERT INTO test_results (repo_id, test_name, status, duration, error_message, "
+   896→            "error_type, flaky_category, run_id, run_timestamp, trust_score, score_confidence, environment) "
+   897→            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+   898→            (repo_id, test["name"], test["status"], test["duration"],
+   899→             test["error_message"], test["error_type"], flaky_cat,
+   900→             run_id, timestamp, trust_score, confidence, environment)
+   901→        )
+   902→        test["trust_score"] = trust_score
+   903→        test["score_confidence"] = confidence
+   904→        test["flaky_category"] = flaky_cat
+   905→        test["flaky_probability"] = flaky_prob
+   906→        total_trust += trust_score
+   907→        test_count += 1
+   908→
+   909→    avg_trust = total_trust / test_count if test_count > 0 else 100
+   910→    c.execute(
+   911→        "INSERT INTO ci_runs (repo_id, run_id, branch, commit_sha, total_tests, passed, "
+   912→        "failed, skipped, avg_trust_score, timestamp, environment) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+   913→        (repo_id, run_id, branch, commit_sha,
+   914→         parsed["total"], parsed["passed"], parsed["failed"], parsed["skipped"],
+   915→         round(avg_trust, 1), timestamp, environment)
+   916→    )
+   917→
+   918→    conn.commit()
+   919→    conn.close()
+   920→
+   921→    parsed["run_id"] = run_id
+   922→    parsed["avg_trust_score"] = round(avg_trust, 1)
+   923→    parsed["timestamp"] = timestamp
+   924→    return parsed
+   925→
+   926→
+   927→# ─────────────────────────────────────────────
+   928→# Dashboard Data
+   929→# ─────────────────────────────────────────────
+   930→
+   931→def get_dashboard_data(repo_name: str) -> dict:
+   932→    """Get aggregated data for the dashboard."""
+   933→    _init_db()
+   934→    conn = _get_db()
+   935→
+   936→    c = conn.cursor()
+   937→    c.execute("SELECT id FROM repositories WHERE name=?", (repo_name,))
+   938→    row = c.fetchone()
+   939→    if not row:
+   940→        conn.close()
+   941→        return {"error": "Repository not found"}
+   942→
+   943→    repo_id = row["id"]
+   944→
+   945→    c.execute(
+   946→        "SELECT COUNT(*) as total, "
+   947→        "AVG(CASE WHEN status='passed' THEN 1.0 ELSE 0.0 END) as pass_rate, "
+   948→        "AVG(trust_score) as avg_trust, "
+   949→        "AVG(score_confidence) as avg_confidence, "
+   950→        "COUNT(DISTINCT run_id) as total_runs "
+   951→        "FROM test_results WHERE repo_id=?", (repo_id,)
+   952→    )
+   953→    stats = dict(c.fetchone())
+   954→
+   955→    c.execute(
+   956→        "SELECT test_name, AVG(trust_score) as trust_score, "
+   957→        "AVG(score_confidence) as confidence, "
+   958→        "COUNT(*) as runs, flaky_category, "
+   959→        "AVG(CASE WHEN status='passed' THEN 1.0 ELSE 0.0 END) as pass_rate, "
+   960→        "GROUP_CONCAT(DISTINCT status) as recent_statuses "
+   961→        "FROM test_results WHERE repo_id=? "
+   962→        "GROUP BY test_name HAVING AVG(trust_score) < 80 "
+   963→        "ORDER BY trust_score ASC",
+   964→        (repo_id,)
+   965→    )
+   966→    flaky_tests = [dict(r) for r in c.fetchall()]
+   967→
+   968→    for ft in flaky_tests:
+   969→        c.execute(
+   970→            "SELECT status, run_timestamp FROM test_results "
+   971→            "WHERE repo_id=? AND test_name=? ORDER BY run_timestamp DESC LIMIT 10",
+   972→            (repo_id, ft["test_name"])
+   973→        )
+   974→        ft["recent_results"] = [dict(r) for r in c.fetchall()][::-1]
+   975→
+   976→    c.execute(
+   977→        "SELECT run_id, branch, commit_sha, total_tests, passed, failed, "
+   978→        "avg_trust_score, timestamp FROM ci_runs WHERE repo_id=? "
+   979→        "ORDER BY timestamp DESC LIMIT 20",
+   980→        (repo_id,)
+   981→    )
+   982→    recent_runs = [dict(r) for r in c.fetchall()]
+   983→
+   984→    c.execute(
+   985→        "SELECT CASE "
+   986→        "WHEN trust_score >= 90 THEN 'high' "
+   987→        "WHEN trust_score >= 70 THEN 'medium' "
+   988→        "WHEN trust_score >= 50 THEN 'low' "
+   989→        "ELSE 'critical' END as bucket, COUNT(*) as count "
+   990→        "FROM (SELECT test_name, AVG(trust_score) as trust_score "
+   991→        "FROM test_results WHERE repo_id=? GROUP BY test_name) "
+   992→        "GROUP BY bucket",
+   993→        (repo_id,)
+   994→    )
+   995→    distribution = {r["bucket"]: r["count"] for r in c.fetchall()}
+   996→
+   997→    conn.close()
+   998→
+   999→    return {
+  1000→        "stats": stats,
+  1001→        "flaky_tests": flaky_tests,
+  1002→        "recent_runs": recent_runs,
+  1003→        "trust_distribution": distribution,
+  1004→    }
+  1005→
+  1006→
+  1007→def get_test_detail(repo_name: str, test_name: str) -> dict:
+  1008→    """Get detailed analysis for a single test."""
+  1009→    _init_db()
+  1010→    conn = _get_db()
+  1011→
+  1012→    c = conn.cursor()
+  1013→    c.execute("SELECT id FROM repositories WHERE name=?", (repo_name,))
+  1014→    row = c.fetchone()
+  1015→    if not row:
+  1016→        conn.close()
+  1017→        return {"error": "Repository not found"}
+  1018→
+  1019→    repo_id = row["id"]
+  1020→    history_rows = _get_test_history(conn, repo_id, test_name, limit=100)
+  1021→    history = [dict(h) for h in history_rows]
+  1022→
+  1023→    trust_score = calculate_trust_score(history)
+  1024→    flaky_cat = classify_flaky_category(history, None)
+  1025→    flaky_prob = calculate_flaky_probability(history)
+  1026→    breakdown = calculate_score_breakdown(history)
+  1027→
+  1028→    conn.close()
+  1029→
+  1030→    return {
+  1031→        "test_name": test_name,
+  1032→        "trust_score": trust_score,
+  1033→        "flaky_category": flaky_cat,
+  1034→        "flaky_probability": flaky_prob,
+  1035→        "total_runs": len(history),
+  1036→        "pass_rate": calculate_bayesian_pass_rate(history),
+  1037→        "recent_trend": calculate_recent_trend(history),
+  1038→        "duration_variance": calculate_duration_variance(history),
+  1039→        "error_consistency": calculate_error_pattern(history),
+  1040→        "history": history[::-1],
+  1041→        "breakdown": breakdown,
+  1042→    }
+  1043→
+  1044→
+  1045→def get_quarantined_tests(repo_name: str, threshold: float = 30) -> list:
+  1046→    """Get tests that should be quarantined (trust score below threshold)."""
+  1047→    _init_db()
+  1048→    conn = _get_db()
+  1049→
+  1050→    c = conn.cursor()
+  1051→    c.execute("SELECT id FROM repositories WHERE name=?", (repo_name,))
+  1052→    row = c.fetchone()
+  1053→    if not row:
+  1054→        conn.close()
+  1055→        return []
+  1056→
+  1057→    repo_id = row["id"]
+  1058→    c.execute(
+  1059→        "SELECT test_name, AVG(trust_score) as trust_score, flaky_category, "
+  1060→        "AVG(score_confidence) as confidence, "
+  1061→        "COUNT(*) as total_runs, "
+  1062→        "AVG(CASE WHEN status='passed' THEN 1.0 ELSE 0.0 END) as pass_rate "
+  1063→        "FROM test_results WHERE repo_id=? "
+  1064→        "GROUP BY test_name HAVING AVG(trust_score) < ? "
+  1065→        "ORDER BY trust_score ASC",
+  1066→        (repo_id, threshold)
+  1067→    )
+  1068→    quarantined = [dict(r) for r in c.fetchall()]
+  1069→    conn.close()
+  1070→    return quarantined
+  1071→
+  1072→
+  1073→# ─────────────────────────────────────────────
+  1074→# Alert System
+  1075→# ─────────────────────────────────────────────
+  1076→
+  1077→def send_alert(repo_name: str, webhook_url: str, channel_type: str = "discord",
+  1078→               alert_data: dict = None):
+  1079→    """Send alert to Discord/Slack webhook."""
+  1080→    import urllib.request
+  1081→    import urllib.error
+  1082→
+  1083→    if channel_type == "discord":
+  1084→        embed = {
+  1085→            "title": f"Poly Alert — {repo_name}",
+  1086→            "color": 0x8B5CF6,
+  1087→            "fields": [],
+  1088→            "footer": {"text": "Poly — AI Flaky Test Trust Layer"},
+  1089→            "timestamp": datetime.now(timezone.utc).isoformat(),
+  1090→        }
+  1091→        if alert_data:
+  1092→            for key, val in alert_data.items():
+  1093→                embed["fields"].append({"name": key, "value": str(val), "inline": True})
+  1094→        payload = {"embeds": [embed]}
+  1095→    else:
+  1096→        blocks = [{
+  1097→            "type": "section",
+  1098→            "text": {
+  1099→                "type": "mrkdwn",
+  1100→                "text": f"*Poly Alert — {repo_name}*\n" +
+  1101→                        "\n".join(f"*{k}*: {v}" for k, v in (alert_data or {}).items())
+  1102→            }
+  1103→        }]
+  1104→        payload = {"blocks": blocks}
+  1105→
+  1106→    try:
+  1107→        req = urllib.request.Request(
+  1108→            webhook_url,
+  1109→            data=json.dumps(payload).encode(),
+  1110→            headers={"Content-Type": "application/json"},
+  1111→            method="POST"
+  1112→        )
+  1113→        urllib.request.urlopen(req, timeout=5)
+  1114→        return True
+  1115→    except Exception:
+  1116→        return False

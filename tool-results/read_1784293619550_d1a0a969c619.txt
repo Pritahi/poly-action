@@ -1,0 +1,1030 @@
+     1→<!DOCTYPE html>
+     2→<html lang="en">
+     3→<head>
+     4→<meta charset="UTF-8">
+     5→<meta name="viewport" content="width=device-width, initial-scale=1.0">
+     6→<title>Poly — Test Detail</title>
+     7→<style>
+     8→:root {
+     9→  --bg: #09090b;
+    10→  --surface: #111114;
+    11→  --surface-2: #18181b;
+    12→  --border: #27272a;
+    13→  --text: #fafafa;
+    14→  --text-secondary: #a1a1aa;
+    15→  --text-muted: #71717a;
+    16→  --purple: #8b5cf6;
+    17→  --purple-light: #a78bfa;
+    18→  --green: #22c55e;
+    19→  --yellow: #eab308;
+    20→  --orange: #f97316;
+    21→  --red: #ef4444;
+    22→  --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    23→  --mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+    24→  --radius: 8px;
+    25→  --radius-sm: 6px;
+    26→  --radius-xs: 4px;
+    27→  --transition: 0.15s ease;
+    28→  --transition-page: 0.3s ease;
+    29→  --sidebar-w: 220px;
+    30→  --sidebar-collapsed: 60px;
+    31→  --topbar-h: 56px;
+    32→}
+    33→
+    34→* { margin: 0; padding: 0; box-sizing: border-box; }
+    35→
+    36→body {
+    37→  background: var(--bg);
+    38→  color: var(--text);
+    39→  font-family: var(--font);
+    40→  line-height: 1.6;
+    41→  min-height: 100vh;
+    42→  overflow-x: hidden;
+    43→}
+    44→
+    45→/* ===== SIDEBAR ===== */
+    46→.sidebar {
+    47→  position: fixed;
+    48→  top: 0; left: 0;
+    49→  width: var(--sidebar-w);
+    50→  height: 100vh;
+    51→  background: var(--surface);
+    52→  border-right: 1px solid var(--border);
+    53→  display: flex;
+    54→  flex-direction: column;
+    55→  z-index: 100;
+    56→  transition: width var(--transition-page);
+    57→  overflow: hidden;
+    58→}
+    59→.sidebar.collapsed { width: var(--sidebar-collapsed); }
+    60→
+    61→.sidebar-header {
+    62→  display: flex;
+    63→  align-items: center;
+    64→  gap: 10px;
+    65→  padding: 16px;
+    66→  height: var(--topbar-h);
+    67→  border-bottom: 1px solid var(--border);
+    68→  flex-shrink: 0;
+    69→}
+    70→
+    71→.sidebar-logo {
+    72→  font-size: 22px;
+    73→  font-weight: 800;
+    74→  background: linear-gradient(135deg, var(--purple), var(--purple-light));
+    75→  -webkit-background-clip: text;
+    76→  -webkit-text-fill-color: transparent;
+    77→  background-clip: text;
+    78→  white-space: nowrap;
+    79→}
+    80→
+    81→.sidebar-toggle {
+    82→  position: absolute;
+    83→  top: 16px; right: -14px;
+    84→  width: 28px; height: 28px;
+    85→  background: var(--surface-2);
+    86→  border: 1px solid var(--border);
+    87→  border-radius: 50%;
+    88→  color: var(--text-secondary);
+    89→  cursor: pointer;
+    90→  display: flex;
+    91→  align-items: center;
+    92→  justify-content: center;
+    93→  font-size: 14px;
+    94→  transition: all var(--transition);
+    95→  z-index: 101;
+    96→}
+    97→.sidebar-toggle:hover {
+    98→  background: var(--purple);
+    99→  color: var(--text);
+   100→  border-color: var(--purple);
+   101→}
+   102→
+   103→.sidebar-nav {
+   104→  flex: 1;
+   105→  padding: 12px 8px;
+   106→  display: flex;
+   107→  flex-direction: column;
+   108→  gap: 2px;
+   109→}
+   110→
+   111→.nav-item {
+   112→  display: flex;
+   113→  align-items: center;
+   114→  gap: 10px;
+   115→  padding: 10px 12px;
+   116→  border-radius: var(--radius-sm);
+   117→  color: var(--text-secondary);
+   118→  text-decoration: none;
+   119→  font-size: 14px;
+   120→  font-weight: 500;
+   121→  transition: all var(--transition);
+   122→  white-space: nowrap;
+   123→  overflow: hidden;
+   124→}
+   125→.nav-item:hover { background: rgba(139, 92, 246, 0.08); color: var(--text); }
+   126→.nav-item.active { background: rgba(139, 92, 246, 0.15); color: var(--purple-light); }
+   127→.nav-item svg { width: 20px; height: 20px; flex-shrink: 0; }
+   128→.nav-label { transition: opacity var(--transition-page); }
+   129→.sidebar.collapsed .nav-label { opacity: 0; pointer-events: none; }
+   130→.sidebar.collapsed .sidebar-logo span { display: none; }
+   131→
+   132→/* ===== MAIN ===== */
+   133→.main {
+   134→  margin-left: var(--sidebar-w);
+   135→  min-height: 100vh;
+   136→  transition: margin-left var(--transition-page);
+   137→}
+   138→.sidebar.collapsed ~ .main { margin-left: var(--sidebar-collapsed); }
+   139→
+   140→/* ===== TOPBAR ===== */
+   141→.topbar {
+   142→  height: var(--topbar-h);
+   143→  background: rgba(9, 9, 11, 0.85);
+   144→  backdrop-filter: blur(12px);
+   145→  -webkit-backdrop-filter: blur(12px);
+   146→  border-bottom: 1px solid var(--border);
+   147→  display: flex;
+   148→  align-items: center;
+   149→  padding: 0 24px;
+   150→  gap: 16px;
+   151→  position: sticky;
+   152→  top: 0;
+   153→  z-index: 50;
+   154→}
+   155→
+   156→.back-btn {
+   157→  display: flex;
+   158→  align-items: center;
+   159→  gap: 6px;
+   160→  color: var(--text-secondary);
+   161→  text-decoration: none;
+   162→  font-size: 13px;
+   163→  font-weight: 500;
+   164→  padding: 6px 12px;
+   165→  border-radius: var(--radius-sm);
+   166→  transition: all var(--transition);
+   167→  border: 1px solid transparent;
+   168→}
+   169→.back-btn:hover {
+   170→  color: var(--text);
+   171→  background: var(--surface-2);
+   172→  border-color: var(--border);
+   173→}
+   174→.back-btn svg { width: 16px; height: 16px; }
+   175→
+   176→.topbar-sep {
+   177→  width: 1px;
+   178→  height: 24px;
+   179→  background: var(--border);
+   180→}
+   181→
+   182→.topbar-title {
+   183→  font-family: var(--mono);
+   184→  font-size: 14px;
+   185→  color: var(--text);
+   186→  flex: 1;
+   187→  overflow: hidden;
+   188→  text-overflow: ellipsis;
+   189→  white-space: nowrap;
+   190→}
+   191→
+   192→.trust-badge {
+   193→  display: flex;
+   194→  align-items: center;
+   195→  gap: 8px;
+   196→  padding: 4px 14px 4px 6px;
+   197→  border-radius: 20px;
+   198→  font-size: 14px;
+   199→  font-weight: 700;
+   200→  border: 1px solid;
+   201→}
+   202→
+   203→.trust-badge-circle {
+   204→  width: 28px; height: 28px;
+   205→  border-radius: 50%;
+   206→  display: flex;
+   207→  align-items: center;
+   208→  justify-content: center;
+   209→  font-size: 12px;
+   210→  color: #fff;
+   211→  font-weight: 700;
+   212→}
+   213→
+   214→/* ===== CONTENT ===== */
+   215→.content { padding: 24px; max-width: 1000px; }
+   216→
+   217→.loading-state {
+   218→  display: flex;
+   219→  align-items: center;
+   220→  justify-content: center;
+   221→  min-height: 40vh;
+   222→  color: var(--text-muted);
+   223→  gap: 10px;
+   224→}
+   225→
+   226→.spinner {
+   227→  width: 20px; height: 20px;
+   228→  border: 2px solid var(--border);
+   229→  border-top-color: var(--purple);
+   230→  border-radius: 50%;
+   231→  animation: spin 0.6s linear infinite;
+   232→}
+   233→@keyframes spin { to { transform: rotate(360deg); } }
+   234→
+   235→.error-state {
+   236→  text-align: center;
+   237→  padding: 64px 24px;
+   238→  color: var(--text-muted);
+   239→}
+   240→.error-state h2 { color: var(--text-secondary); margin-bottom: 8px; font-size: 18px; }
+   241→
+   242→/* ===== SECTION CARD ===== */
+   243→.section-card {
+   244→  background: var(--surface);
+   245→  border: 1px solid var(--border);
+   246→  border-radius: var(--radius);
+   247→  padding: 20px;
+   248→  margin-bottom: 20px;
+   249→}
+   250→
+   251→.section-title {
+   252→  font-size: 14px;
+   253→  font-weight: 600;
+   254→  color: var(--text-secondary);
+   255→  margin-bottom: 16px;
+   256→  text-transform: uppercase;
+   257→  letter-spacing: 0.5px;
+   258→}
+   259→
+   260→/* ===== METRIC GRID ===== */
+   261→.metrics-grid {
+   262→  display: grid;
+   263→  grid-template-columns: repeat(2, 1fr);
+   264→  gap: 16px;
+   265→  margin-bottom: 20px;
+   266→}
+   267→
+   268→.metric-card {
+   269→  background: var(--surface);
+   270→  border: 1px solid var(--border);
+   271→  border-radius: var(--radius);
+   272→  padding: 20px;
+   273→  transition: all var(--transition);
+   274→}
+   275→.metric-card:hover { border-color: rgba(139,92,246,0.3); }
+   276→
+   277→.metric-header {
+   278→  display: flex;
+   279→  align-items: center;
+   280→  justify-content: space-between;
+   281→  margin-bottom: 12px;
+   282→}
+   283→
+   284→.metric-label {
+   285→  font-size: 13px;
+   286→  color: var(--text-secondary);
+   287→  font-weight: 500;
+   288→}
+   289→
+   290→.metric-weight {
+   291→  font-size: 11px;
+   292→  color: var(--text-muted);
+   293→  background: var(--surface-2);
+   294→  padding: 2px 8px;
+   295→  border-radius: 10px;
+   296→  border: 1px solid var(--border);
+   297→}
+   298→
+   299→.metric-value-row {
+   300→  display: flex;
+   301→  align-items: baseline;
+   302→  gap: 8px;
+   303→  margin-bottom: 8px;
+   304→}
+   305→
+   306→.metric-value {
+   307→  font-size: 26px;
+   308→  font-weight: 700;
+   309→  line-height: 1.2;
+   310→}
+   311→
+   312→.metric-unit { font-size: 14px; color: var(--text-muted); }
+   313→
+   314→.metric-bar-bg {
+   315→  height: 6px;
+   316→  background: var(--border);
+   317→  border-radius: 3px;
+   318→  overflow: hidden;
+   319→  margin-top: 8px;
+   320→}
+   321→
+   322→.metric-bar-fill {
+   323→  height: 100%;
+   324→  border-radius: 3px;
+   325→  transition: width 0.8s ease;
+   326→}
+   327→
+   328→.metric-contrib {
+   329→  font-size: 12px;
+   330→  color: var(--text-muted);
+   331→  margin-top: 6px;
+   332→}
+   333→.metric-contrib span { color: var(--purple-light); font-weight: 600; }
+   334→
+   335→.metric-arrow { font-size: 16px; margin-left: 4px; }
+   336→.metric-arrow.up { color: var(--green); }
+   337→.metric-arrow.down { color: var(--red); }
+   338→.metric-arrow.flat { color: var(--text-muted); }
+   339→
+   340→/* ===== FLAKY CATEGORY CARD ===== */
+   341→.flaky-card {
+   342→  border-left: 3px solid var(--orange);
+   343→  padding-left: 20px;
+   344→}
+   345→.flaky-card .flaky-cat-name {
+   346→  font-size: 16px;
+   347→  font-weight: 600;
+   348→  margin-bottom: 6px;
+   349→  color: var(--orange);
+   350→}
+   351→.flaky-card .flaky-desc {
+   352→  font-size: 14px;
+   353→  color: var(--text-secondary);
+   354→  margin-bottom: 12px;
+   355→  line-height: 1.7;
+   356→}
+   357→.flaky-card .flaky-rec {
+   358→  font-size: 13px;
+   359→  color: var(--text-muted);
+   360→  padding: 10px 14px;
+   361→  background: var(--surface-2);
+   362→  border-radius: var(--radius-sm);
+   363→  border: 1px solid var(--border);
+   364→}
+   365→.flaky-card .flaky-rec strong { color: var(--text-secondary); }
+   366→
+   367→/* ===== CHART ===== */
+   368→.chart-container {
+   369→  position: relative;
+   370→  width: 100%;
+   371→  height: 280px;
+   372→}
+   373→
+   374→.chart-container canvas {
+   375→  width: 100% !important;
+   376→  height: 100% !important;
+   377→  border-radius: var(--radius-sm);
+   378→}
+   379→
+   380→/* ===== RUN HISTORY TABLE ===== */
+   381→.data-table { width: 100%; border-collapse: collapse; }
+   382→.data-table thead th {
+   383→  background: rgba(255,255,255,0.02);
+   384→  color: var(--text-muted);
+   385→  font-weight: 600;
+   386→  font-size: 11px;
+   387→  text-transform: uppercase;
+   388→  letter-spacing: 0.5px;
+   389→  padding: 10px 14px;
+   390→  text-align: left;
+   391→  border-bottom: 1px solid var(--border);
+   392→  white-space: nowrap;
+   393→}
+   394→.data-table tbody td {
+   395→  padding: 10px 14px;
+   396→  border-bottom: 1px solid rgba(39,39,42,0.5);
+   397→  font-size: 13px;
+   398→  vertical-align: middle;
+   399→}
+   400→.data-table tbody tr:last-child td { border-bottom: none; }
+   401→.data-table tbody tr:hover { background: rgba(255,255,255,0.015); }
+   402→
+   403→.status-dot {
+   404→  display: inline-block;
+   405→  width: 8px; height: 8px;
+   406→  border-radius: 50%;
+   407→  margin-right: 6px;
+   408→  vertical-align: middle;
+   409→}
+   410→.status-dot.passed { background: var(--green); }
+   411→.status-dot.failed { background: var(--red); }
+   412→.status-dot.skipped { background: var(--text-muted); }
+   413→
+   414→.mono-cell { font-family: var(--mono); font-size: 12px; }
+   415→
+   416→.error-msg {
+   417→  max-width: 300px;
+   418→  overflow: hidden;
+   419→  text-overflow: ellipsis;
+   420→  white-space: nowrap;
+   421→  font-family: var(--mono);
+   422→  font-size: 11px;
+   423→  color: var(--text-muted);
+   424→  position: relative;
+   425→  cursor: pointer;
+   426→}
+   427→.error-msg:hover { color: var(--text-secondary); }
+   428→
+   429→.error-tooltip {
+   430→  display: none;
+   431→  position: absolute;
+   432→  bottom: calc(100% + 8px);
+   433→  left: 0;
+   434→  right: 0;
+   435→  background: var(--surface-2);
+   436→  border: 1px solid var(--border);
+   437→  border-radius: var(--radius-sm);
+   438→  padding: 10px 14px;
+   439→  font-size: 12px;
+   440→  color: var(--text-secondary);
+   441→  white-space: pre-wrap;
+   442→  word-break: break-all;
+   443→  z-index: 20;
+   444→  max-height: 200px;
+   445→  overflow-y: auto;
+   446→  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+   447→}
+   448→.error-msg:hover .error-tooltip { display: block; }
+   449→
+   450→/* ===== ERROR PATTERN CARDS ===== */
+   451→.error-patterns-grid {
+   452→  display: grid;
+   453→  gap: 12px;
+   454→}
+   455→
+   456→.error-pattern-card {
+   457→  background: var(--surface-2);
+   458→  border: 1px solid var(--border);
+   459→  border-radius: var(--radius-sm);
+   460→  padding: 14px 16px;
+   461→  display: flex;
+   462→  align-items: flex-start;
+   463→  gap: 12px;
+   464→  transition: all var(--transition);
+   465→}
+   466→.error-pattern-card:hover { border-color: rgba(139,92,246,0.3); }
+   467→
+   468→.error-pattern-text {
+   469→  flex: 1;
+   470→  font-family: var(--mono);
+   471→  font-size: 12px;
+   472→  color: var(--text-secondary);
+   473→  line-height: 1.6;
+   474→  overflow: hidden;
+   475→  text-overflow: ellipsis;
+   476→  display: -webkit-box;
+   477→  -webkit-line-clamp: 2;
+   478→  -webkit-box-orient: vertical;
+   479→}
+   480→
+   481→.error-pattern-count {
+   482→  font-size: 12px;
+   483→  font-weight: 700;
+   484→  color: var(--red);
+   485→  background: rgba(239,68,68,0.1);
+   486→  padding: 2px 10px;
+   487→  border-radius: 10px;
+   488→  border: 1px solid rgba(239,68,68,0.2);
+   489→  white-space: nowrap;
+   490→  flex-shrink: 0;
+   491→}
+   492→
+   493→/* Responsive */
+   494→@media (max-width: 900px) {
+   495→  .sidebar { width: var(--sidebar-collapsed); }
+   496→  .sidebar .nav-label, .sidebar .sidebar-logo span { display: none; }
+   497→  .main { margin-left: var(--sidebar-collapsed) !important; }
+   498→  .metrics-grid { grid-template-columns: 1fr; }
+   499→  .content { padding: 16px; }
+   500→}
+   501→
+   502→@media (max-width: 600px) {
+   503→  .topbar { padding: 0 12px; }
+   504→  .back-btn span { display: none; }
+   505→}
+   506→</style>
+   507→</head>
+   508→<body>
+   509→
+   510→<!-- Sidebar -->
+   511→<aside class="sidebar" id="sidebar">
+   512→  <div class="sidebar-header">
+   513→    <div class="sidebar-logo"><span>Poly</span></div>
+   514→  </div>
+   515→  <button class="sidebar-toggle" id="sidebarToggle" title="Toggle sidebar">
+   516→    <svg viewBox="0 0 16 16" fill="currentColor" width="14" height="14">
+   517→      <path d="M3.646 3.646a.5.5 0 0 1 .708 0L8 7.293l3.646-3.647a.5.5 0 0 1 .708.708L8.707 8l3.647 3.646a.5.5 0 0 1-.708.708L8 8.707l-3.646 3.647a.5.5 0 0 1-.708-.708L7.293 8 3.646 4.354a.5.5 0 0 1 0-.708z" id="toggleIcon"/>
+   518→    </svg>
+   519→  </button>
+   520→  <nav class="sidebar-nav">
+   521→    <a href="/dashboard/" class="nav-item" data-page="dashboard">
+   522→      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+   523→        <rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/>
+   524→      </svg>
+   525→      <span class="nav-label">Dashboard</span>
+   526→    </a>
+   527→    <a href="/dashboard/tests.html" class="nav-item" data-page="tests">
+   528→      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+   529→        <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+   530→      </svg>
+   531→      <span class="nav-label">Tests</span>
+   532→    </a>
+   533→    <a href="/dashboard/guide.html" class="nav-item" data-page="guide">
+   534→      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+   535→        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+   536→      </svg>
+   537→      <span class="nav-label">Guide</span>
+   538→    </a>
+   539→  </nav>
+   540→</aside>
+   541→
+   542→<!-- Main -->
+   543→<div class="main" id="mainArea">
+   544→  <!-- Top Bar -->
+   545→  <div class="topbar">
+   546→    <a href="/dashboard/" class="back-btn" id="backBtn">
+   547→      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+   548→        <line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>
+   549→      </svg>
+   550→      <span>Back to Dashboard</span>
+   551→    </a>
+   552→    <div class="topbar-sep"></div>
+   553→    <div class="topbar-title" id="topbarTitle">Loading...</div>
+   554→    <div class="trust-badge" id="trustBadge" style="display:none">
+   555→      <div class="trust-badge-circle" id="badgeCircle">—</div>
+   556→      <span id="badgeValue">—</span>
+   557→    </div>
+   558→  </div>
+   559→
+   560→  <!-- Content -->
+   561→  <div class="content" id="content">
+   562→    <div class="loading-state" id="loadingState">
+   563→      <div class="spinner"></div>
+   564→      <span>Loading test details...</span>
+   565→    </div>
+   566→    <div class="error-state" id="errorState" style="display:none">
+   567→      <h2>Test not found</h2>
+   568→      <p>Could not load details for this test.</p>
+   569→    </div>
+   570→    <div id="detailContent" style="display:none">
+   571→
+   572→      <!-- Score Breakdown -->
+   573→      <div class="section-title" style="margin-bottom:16px">Score Breakdown</div>
+   574→      <div class="metrics-grid" id="metricsGrid"></div>
+   575→
+   576→      <!-- Flaky Category -->
+   577→      <div class="section-card" id="flakyCard" style="display:none">
+   578→        <div class="section-title">Flaky Classification</div>
+   579→        <div class="flaky-card" id="flakyContent"></div>
+   580→      </div>
+   581→
+   582→      <!-- Trust Score History Chart -->
+   583→      <div class="section-card">
+   584→        <div class="section-title">Trust Score History</div>
+   585→        <div class="chart-container">
+   586→          <canvas id="historyChart"></canvas>
+   587→        </div>
+   588→      </div>
+   589→
+   590→      <!-- Run History -->
+   591→      <div class="section-card">
+   592→        <div class="section-title">Run History</div>
+   593→        <table class="data-table">
+   594→          <thead>
+   595→            <tr>
+   596→              <th>#</th>
+   597→              <th>Status</th>
+   598→              <th>Duration</th>
+   599→              <th>Error Message</th>
+   600→              <th>Trust Score</th>
+   601→              <th>Time</th>
+   602→            </tr>
+   603→          </thead>
+   604→          <tbody id="historyBody"></tbody>
+   605→        </table>
+   606→      </div>
+   607→
+   608→      <!-- Error Pattern Analysis -->
+   609→      <div class="section-card" id="errorPatternsSection" style="display:none">
+   610→        <div class="section-title">Error Pattern Analysis</div>
+   611→        <div class="error-patterns-grid" id="errorPatternsGrid"></div>
+   612→      </div>
+   613→
+   614→    </div>
+   615→  </div>
+   616→</div>
+   617→
+   618→<script>
+   619→const API = window.location.origin;
+   620→const params = new URLSearchParams(window.location.search);
+   621→const repoName = params.get('repo_name') || '';
+   622→const testName = params.get('test_name') || '';
+   623→const $ = id => document.getElementById(id);
+   624→
+   625→// Sidebar toggle
+   626→$('sidebarToggle').addEventListener('click', () => {
+   627→  $('sidebar').classList.toggle('collapsed');
+   628→});
+   629→
+   630→// Back button with repo preserved
+   631→$('backBtn').href = '/dashboard/' + (repoName ? '?repo=' + encodeURIComponent(repoName) : '');
+   632→
+   633→// Trust color
+   634→function trustColor(score) {
+   635→  if (score >= 90) return 'var(--green)';
+   636→  if (score >= 70) return 'var(--yellow)';
+   637→  if (score >= 50) return 'var(--orange)';
+   638→  return 'var(--red)';
+   639→}
+   640→
+   641→function trustColorHex(score) {
+   642→  if (score >= 90) return '#22c55e';
+   643→  if (score >= 70) return '#eab308';
+   644→  if (score >= 50) return '#f97316';
+   645→  return '#ef4444';
+   646→}
+   647→
+   648→// Category descriptions and recommendations
+   649→const categoryInfo = {
+   650→  timing: {
+   651→    desc: 'This test has inconsistent execution times, suggesting timeout or race condition issues.',
+   652→    rec: 'Add explicit waits or mock time-dependent components. Consider increasing timeout thresholds.'
+   653→  },
+   654→  order_dependency: {
+   655→    desc: "This test's outcome changes based on execution order. Check for shared state or test isolation issues.",
+   656→    rec: 'Ensure each test cleans up after itself. Avoid global state. Use setup/teardown fixtures to reset state.'
+   657→  },
+   658→  shared_state: {
+   659→    desc: 'This test shares state with other tests, causing intermittent failures.',
+   660→    rec: 'Isolate test state. Use unique identifiers for test data. Consider running the test in isolation.'
+   661→  },
+   662→  non_deterministic_data: {
+   663→    desc: 'This test fails due to unpredictable external data or random values.',
+   664→    rec: 'Seed random generators. Mock external APIs and data sources. Avoid assertions on non-deterministic values.'
+   665→  }
+   666→};
+   667→
+   668→// Load test detail
+   669→async function loadTestDetail() {
+   670→  if (!repoName || !testName) {
+   671→    $('loadingState').style.display = 'none';
+   672→    $('errorState').style.display = 'block';
+   673→    $('errorState').querySelector('p').textContent = 'Missing repo_name or test_name parameter.';
+   674→    return;
+   675→  }
+   676→
+   677→  try {
+   678→    const res = await fetch(`${API}/api/tests/${encodeURIComponent(testName)}?repo_name=${encodeURIComponent(repoName)}`);
+   679→    if (!res.ok) throw new Error('Not found');
+   680→    const data = await res.json();
+   681→
+   682→    $('loadingState').style.display = 'none';
+   683→    $('detailContent').style.display = 'block';
+   684→
+   685→    renderHeader(data);
+   686→    renderMetrics(data);
+   687→    renderFlakyCategory(data);
+   688→    renderChart(data.history || []);
+   689→    renderHistory(data.history || []);
+   690→    renderErrorPatterns(data.history || []);
+   691→
+   692→  } catch (e) {
+   693→    $('loadingState').style.display = 'none';
+   694→    $('errorState').style.display = 'block';
+   695→  }
+   696→}
+   697→
+   698→// Render header
+   699→function renderHeader(data) {
+   700→  const score = Math.round(data.trust_score || 0);
+   701→  const color = trustColorHex(score);
+   702→
+   703→  $('topbarTitle').textContent = data.test_name || testName;
+   704→  document.title = `Poly — ${data.test_name || testName}`;
+   705→
+   706→  $('trustBadge').style.display = 'flex';
+   707→  $('trustBadge').style.borderColor = color + '44';
+   708→  $('trustBadge').style.background = color + '11';
+   709→  $('badgeCircle').textContent = score;
+   710→  $('badgeCircle').style.background = color;
+   711→  $('badgeValue').textContent = score + '/100';
+   712→  $('badgeValue').style.color = color;
+   713→}
+   714→
+   715→// Render score breakdown metrics
+   716→function renderMetrics(data) {
+   717→  const passRate = data.pass_rate || 0;
+   718→  const trend = data.recent_trend || 0;
+   719→  const durVar = data.duration_variance || 0;
+   720→  const errCons = data.error_consistency || 0;
+   721→
+   722→  // Calculate contributions
+   723→  const passPoints = (passRate * 60).toFixed(1);
+   724→  const trendPoints = (Math.max(0, (50 + trend)) / 100 * 20).toFixed(1);
+   725→  const durPoints = ((100 - durVar) / 100 * 10).toFixed(1);
+   726→  const errPoints = (errCons / 100 * 10).toFixed(1);
+   727→
+   728→  const trendArrow = trend > 0 ? 'up' : trend < 0 ? 'down' : 'flat';
+   729→  const trendArrowChar = trendArrow === 'up' ? '↑' : trendArrow === 'down' ? '↓' : '→';
+   730→
+   731→  const stability = durVar < 15 ? 'Stable' : durVar < 40 ? 'Moderate' : 'Unstable';
+   732→
+   733→  $('metricsGrid').innerHTML = `
+   734→    <div class="metric-card">
+   735→      <div class="metric-header">
+   736→        <span class="metric-label">Pass Rate</span>
+   737→        <span class="metric-weight">60% weight</span>
+   738→      </div>
+   739→      <div class="metric-value-row">
+   740→        <span class="metric-value" style="color:${trustColor(passRate*100)}">${Math.round(passRate*100)}%</span>
+   741→        <span class="metric-unit">of runs pass</span>
+   742→      </div>
+   743→      <div class="metric-bar-bg">
+   744→        <div class="metric-bar-fill" style="width:${passRate*100}%;background:${trustColor(passRate*100)}"></div>
+   745→      </div>
+   746→      <div class="metric-contrib">Contributes <span>${passPoints}</span> points</div>
+   747→    </div>
+   748→    <div class="metric-card">
+   749→      <div class="metric-header">
+   750→        <span class="metric-label">Recent Trend</span>
+   751→        <span class="metric-weight">20% weight</span>
+   752→      </div>
+   753→      <div class="metric-value-row">
+   754→        <span class="metric-value" style="color:${trend >= 0 ? 'var(--green)' : 'var(--red)'}">
+   755→          ${trend >= 0 ? '+' : ''}${trend.toFixed(1)}%
+   756→        </span>
+   757→        <span class="metric-arrow ${trendArrow}">${trendArrowChar}</span>
+   758→        <span class="metric-unit">recent vs older</span>
+   759→      </div>
+   760→      <div class="metric-bar-bg">
+   761→        <div class="metric-bar-fill" style="width:${Math.max(0, Math.min(100, (50 + trend)))}%;background:${trend >= 0 ? 'var(--green)' : 'var(--red)'}"></div>
+   762→      </div>
+   763→      <div class="metric-contrib">Contributes <span>${trendPoints}</span> points</div>
+   764→    </div>
+   765→    <div class="metric-card">
+   766→      <div class="metric-header">
+   767→        <span class="metric-label">Duration Stability</span>
+   768→        <span class="metric-weight">10% weight</span>
+   769→      </div>
+   770→      <div class="metric-value-row">
+   771→        <span class="metric-value" style="color:${durVar < 30 ? 'var(--green)' : durVar < 60 ? 'var(--yellow)' : 'var(--red)'}">
+   772→          ${durVar.toFixed(1)}%
+   773→        </span>
+   774→        <span class="metric-unit">variance (${stability})</span>
+   775→      </div>
+   776→      <div class="metric-bar-bg">
+   777→        <div class="metric-bar-fill" style="width:${100 - durVar}%;background:${durVar < 30 ? 'var(--green)' : durVar < 60 ? 'var(--yellow)' : 'var(--red)'}"></div>
+   778→      </div>
+   779→      <div class="metric-contrib">Contributes <span>${durPoints}</span> points</div>
+   780→    </div>
+   781→    <div class="metric-card">
+   782→      <div class="metric-header">
+   783→        <span class="metric-label">Error Consistency</span>
+   784→        <span class="metric-weight">10% weight</span>
+   785→      </div>
+   786→      <div class="metric-value-row">
+   787→        <span class="metric-value" style="color:${errCons > 60 ? 'var(--green)' : errCons > 30 ? 'var(--yellow)' : 'var(--red)'}">
+   788→          ${errCons.toFixed(1)}%
+   789→        </span>
+   790→        <span class="metric-unit">pattern consistency</span>
+   791→      </div>
+   792→      <div class="metric-bar-bg">
+   793→        <div class="metric-bar-fill" style="width:${errCons}%;background:${errCons > 60 ? 'var(--green)' : errCons > 30 ? 'var(--yellow)' : 'var(--red)'}"></div>
+   794→      </div>
+   795→      <div class="metric-contrib">Contributes <span>${errPoints}</span> points</div>
+   796→    </div>
+   797→  `;
+   798→}
+   799→
+   800→// Render flaky category
+   801→function renderFlakyCategory(data) {
+   802→  const cat = data.flaky_category;
+   803→  if (!cat || !categoryInfo[cat]) return;
+   804→
+   805→  const info = categoryInfo[cat];
+   806→  $('flakyCard').style.display = 'block';
+   807→  $('flakyContent').innerHTML = `
+   808→    <div class="flaky-cat-name">${cat.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</div>
+   809→    <div class="flaky-desc">${info.desc}</div>
+   810→    <div class="flaky-rec"><strong>Recommendation:</strong> ${info.rec}</div>
+   811→  `;
+   812→}
+   813→
+   814→// Draw chart on canvas
+   815→function renderChart(history) {
+   816→  const canvas = $('historyChart');
+   817→  const container = canvas.parentElement;
+   818→  const dpr = window.devicePixelRatio || 1;
+   819→
+   820→  canvas.width = container.clientWidth * dpr;
+   821→  canvas.height = container.clientHeight * dpr;
+   822→
+   823→  const ctx = canvas.getContext('2d');
+   824→  ctx.scale(dpr, dpr);
+   825→
+   826→  const W = container.clientWidth;
+   827→  const H = container.clientHeight;
+   828→  const pad = { top: 20, right: 20, bottom: 40, left: 44 };
+   829→  const plotW = W - pad.left - pad.right;
+   830→  const plotH = H - pad.top - pad.bottom;
+   831→
+   832→  // Clear
+   833→  ctx.clearRect(0, 0, W, H);
+   834→
+   835→  // Background zones
+   836→  const zoneRanges = [
+   837→    { from: 80, to: 100, color: 'rgba(34,197,94,0.06)' },
+   838→    { from: 50, to: 80, color: 'rgba(234,179,8,0.06)' },
+   839→    { from: 0, to: 50, color: 'rgba(239,68,68,0.06)' }
+   840→  ];
+   841→
+   842→  zoneRanges.forEach(z => {
+   843→    const y1 = pad.top + plotH - (z.to / 100) * plotH;
+   844→    const y2 = pad.top + plotH - (z.from / 100) * plotH;
+   845→    ctx.fillStyle = z.color;
+   846→    ctx.fillRect(pad.left, y1, plotW, y2 - y1);
+   847→  });
+   848→
+   849→  // Grid lines
+   850→  ctx.strokeStyle = 'rgba(39,39,42,0.6)';
+   851→  ctx.lineWidth = 1;
+   852→  for (let v = 0; v <= 100; v += 20) {
+   853→    const y = pad.top + plotH - (v / 100) * plotH;
+   854→    ctx.beginPath();
+   855→    ctx.setLineDash([4, 4]);
+   856→    ctx.moveTo(pad.left, y);
+   857→    ctx.lineTo(W - pad.right, y);
+   858→    ctx.stroke();
+   859→    ctx.setLineDash([]);
+   860→  }
+   861→
+   862→  // Y-axis labels
+   863→  ctx.fillStyle = '#71717a';
+   864→  ctx.font = '11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+   865→  ctx.textAlign = 'right';
+   866→  ctx.textBaseline = 'middle';
+   867→  for (let v = 0; v <= 100; v += 20) {
+   868→    const y = pad.top + plotH - (v / 100) * plotH;
+   869→    ctx.fillText(v, pad.left - 8, y);
+   870→  }
+   871→
+   872→  if (!history.length) {
+   873→    ctx.fillStyle = '#71717a';
+   874→    ctx.textAlign = 'center';
+   875→    ctx.font = '13px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+   876→    ctx.fillText('No history data', W / 2, H / 2);
+   877→    return;
+   878→  }
+   879→
+   880→  // Take last 20
+   881→  const pts = history.slice(-20);
+   882→  const n = pts.length;
+   883→
+   884→  // X-axis labels
+   885→  ctx.fillStyle = '#71717a';
+   886→  ctx.textAlign = 'center';
+   887→  ctx.textBaseline = 'top';
+   888→  ctx.font = '10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+   889→
+   890→  const xStep = n > 1 ? plotW / (n - 1) : 0;
+   891→
+   892→  pts.forEach((p, i) => {
+   893→    const x = n > 1 ? pad.left + i * xStep : pad.left + plotW / 2;
+   894→    // Show every other label if many points
+   895→    if (n <= 10 || i % 2 === 0 || i === n - 1) {
+   896→      ctx.fillText(i + 1, x, H - pad.bottom + 10);
+   897→    }
+   898→  });
+   899→
+   900→  // X-axis title
+   901→  ctx.fillStyle = '#71717a';
+   902→  ctx.font = '11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+   903→  ctx.fillText('Run #', W / 2, H - 6);
+   904→
+   905→  // Y-axis title
+   906→  ctx.save();
+   907→  ctx.translate(12, H / 2);
+   908→  ctx.rotate(-Math.PI / 2);
+   909→  ctx.fillText('Trust Score', 0, 0);
+   910→  ctx.restore();
+   911→
+   912→  // Compute points
+   913→  const coords = pts.map((p, i) => {
+   914→    const x = n > 1 ? pad.left + i * xStep : pad.left + plotW / 2;
+   915→    const score = Math.max(0, Math.min(100, p.trust_score || 0));
+   916→    const y = pad.top + plotH - (score / 100) * plotH;
+   917→    return { x, y, score };
+   918→  });
+   919→
+   920→  // Area fill
+   921→  if (coords.length > 1) {
+   922→    ctx.beginPath();
+   923→    ctx.moveTo(coords[0].x, pad.top + plotH);
+   924→    coords.forEach(c => ctx.lineTo(c.x, c.y));
+   925→    ctx.lineTo(coords[coords.length - 1].x, pad.top + plotH);
+   926→    ctx.closePath();
+   927→    const grad = ctx.createLinearGradient(0, pad.top, 0, pad.top + plotH);
+   928→    grad.addColorStop(0, 'rgba(139,92,246,0.15)');
+   929→    grad.addColorStop(1, 'rgba(139,92,246,0.0)');
+   930→    ctx.fillStyle = grad;
+   931→    ctx.fill();
+   932→  }
+   933→
+   934→  // Line
+   935→  ctx.beginPath();
+   936→  ctx.strokeStyle = '#8b5cf6';
+   937→  ctx.lineWidth = 2;
+   938→  ctx.lineJoin = 'round';
+   939→  ctx.lineCap = 'round';
+   940→  coords.forEach((c, i) => {
+   941→    if (i === 0) ctx.moveTo(c.x, c.y);
+   942→    else ctx.lineTo(c.x, c.y);
+   943→  });
+   944→  ctx.stroke();
+   945→
+   946→  // Dots
+   947→  coords.forEach(c => {
+   948→    ctx.beginPath();
+   949→    ctx.arc(c.x, c.y, 4, 0, Math.PI * 2);
+   950→    ctx.fillStyle = trustColorHex(c.score);
+   951→    ctx.fill();
+   952→    ctx.strokeStyle = '#09090b';
+   953→    ctx.lineWidth = 2;
+   954→    ctx.stroke();
+   955→  });
+   956→}
+   957→
+   958→// Redraw chart on resize
+   959→window.addEventListener('resize', () => {
+   960→  if (window._chartHistory) renderChart(window._chartHistory);
+   961→});
+   962→
+   963→// Render run history table
+   964→function renderHistory(history) {
+   965→  window._chartHistory = history;
+   966→  const reversed = [...history].reverse();
+   967→  const body = $('historyBody');
+   968→
+   969→  body.innerHTML = reversed.map((h, i) => {
+   970→    const num = reversed.length - i;
+   971→    const status = h.status || 'unknown';
+   972→    const duration = h.duration != null ? (h.duration < 1 ? (h.duration * 1000).toFixed(0) + 'ms' : h.duration.toFixed(2) + 's') : '—';
+   973→    const error = h.error_message || '';
+   974→    const score = Math.round(h.trust_score || 0);
+   975→    const time = h.run_timestamp ? new Date(h.run_timestamp).toLocaleString('en-US', {
+   976→      month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+   977→    }) : '—';
+   978→
+   979→    return `<tr>
+   980→      <td style="color:var(--text-muted);font-size:12px">${num}</td>
+   981→      <td><span class="status-dot ${status}"></span>${status.charAt(0).toUpperCase() + status.slice(1)}</td>
+   982→      <td class="mono-cell">${duration}</td>
+   983→      <td class="error-msg" title="Hover to expand">
+   984→        ${error ? escapeHtml(error) : '<span style="color:var(--text-muted)">—</span>'}
+   985→        ${error ? `<div class="error-tooltip">${escapeHtml(error)}</div>` : ''}
+   986→      </td>
+   987→      <td style="color:${trustColor(score)};font-weight:600">${score}</td>
+   988→      <td style="color:var(--text-muted);font-size:12px;white-space:nowrap">${time}</td>
+   989→    </tr>`;
+   990→  }).join('');
+   991→}
+   992→
+   993→// Render error patterns
+   994→function renderErrorPatterns(history) {
+   995→  const errors = history.filter(h => h.status === 'failed' && h.error_message).map(h => h.error_message);
+   996→  if (errors.length < 2) return;
+   997→
+   998→  // Count unique errors (normalize for grouping)
+   999→  const counts = {};
+  1000→  errors.forEach(e => {
+  1001→    // Normalize: take first 120 chars as key
+  1002→    const key = e.trim().slice(0, 120);
+  1003→    counts[key] = (counts[key] || 0) + 1;
+  1004→  });
+  1005→
+  1006→  const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 3);
+  1007→
+  1008→  if (!sorted.length) return;
+  1009→
+  1010→  $('errorPatternsSection').style.display = 'block';
+  1011→  $('errorPatternsGrid').innerHTML = sorted.map(([msg, count]) => `
+  1012→    <div class="error-pattern-card">
+  1013→      <div class="error-pattern-text">${escapeHtml(msg)}</div>
+  1014→      <div class="error-pattern-count">&times;${count}</div>
+  1015→    </div>
+  1016→  `).join('');
+  1017→}
+  1018→
+  1019→// Escape HTML
+  1020→function escapeHtml(str) {
+  1021→  const div = document.createElement('div');
+  1022→  div.textContent = str;
+  1023→  return div.innerHTML;
+  1024→}
+  1025→
+  1026→// Init
+  1027→loadTestDetail();
+  1028→</script>
+  1029→</body>
+  1030→</html>
