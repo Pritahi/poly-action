@@ -185,12 +185,12 @@ async function run() {
     const commitSha = github.context.sha || 'unknown';
     const environment = process.env.ENVIRONMENT || 'ci';
 
-    // Send to Falsky API
+    // Send to Falsky API (use /api/runs for pre-parsed test results)
     core.info(`📤 Sending to Falsky API...`);
 
     let result;
     try {
-      result = await httpRequest(`${apiUrl}/api/junit`, {
+      result = await httpRequest(`${apiUrl}/api/runs`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -202,7 +202,7 @@ async function run() {
           branch,
           commit_sha: commitSha,
           environment,
-          tests: allTests,
+          test_results: allTests,
         }),
         timeout: 30000,
       });
@@ -221,7 +221,7 @@ async function run() {
     // Fetch dashboard data
     let dashboardData = null;
     try {
-      const dashRes = await httpRequest(`${apiUrl}/api/dashboard?repo=${encodeURIComponent(repoName)}`, {
+      const dashRes = await httpRequest(`${apiUrl}/api/dashboard?repo_name=${encodeURIComponent(repoName)}`, {
         headers: { 'X-Poly-API-Key': apiKey },
         timeout: 15000,
       });
