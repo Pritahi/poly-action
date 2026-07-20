@@ -4,6 +4,7 @@ const https = require('https');
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const { XMLParser } = require('fast-xml-parser');
 
 // ─── Lightweight HTTP Client (no axios needed) ─────────────────────
 function httpRequest(url, options = {}) {
@@ -32,44 +33,54 @@ function httpRequest(url, options = {}) {
   });
 }
 
-// ─── Lightweight XML Parser (no fast-xml-parser needed) ─────────────
+// ─── XML Parser (fast-xml-parser, handles CDATA & edge cases) ───────
+const xmlParser = new XMLParser({
+  ignoreAttributes: false,
+  attributeNamePrefix: '@_',
+  allowBooleanAttributes: true,
+  parseTagValue: false,
+  trimValues: true,
+});
+
 function parseJUnitXML(xmlContent) {
   const tests = [];
-
-  // Extract all <testcase> blocks
-  const testcaseRegex = /<testcase\s+([^>]*?)(?:\/>|>([\s\S]*?)<\/testcase>)/g;
-  let match;
-
-  while ((match = testcaseRegex.exec(xmlContent)) !== null) {
-    const attrs = match[1];
-    const inner = match[2] || '';
-
-    const nameMatch = attrs.match(/name="([^"]*)"/);
-    const classMatch = attrs.match(/classname="([^"]*)"/);
-    const timeMatch = attrs.match(/time="([^"]*)"/);
-
-    const name = nameMatch ? nameMatch[1] : 'unknown';
-    const classname = classMatch ? classMatch[1] : '';
-    const duration = timeMatch ? parseFloat(timeMatch[1]) : 0;
-
-    let status = 'passed';
-    let message = '';
-
-    if (inner.includes('<failure')) {
-      status = 'failed';
-      const msgMatch = inner.match(/message="([^"]*)"/);
-      message = msgMatch ? msgMatch[1] : '';
-    } else if (inner.includes('<error')) {
-      status = 'error';
-      const msgMatch = inner.match(/message="([^"]*)"/);
-      message = msgMatch ? msgMatch[1] : '';
-    } else if (inner.includes('<skipped')) {
-      status = 'skipped';
+  try {
+    const parsed = xmlParser.parse(xmlContent);
+    const suites = [];
+    // Handle <testsuites><testsuite> or standalone <testsuite>
+    if (parsed.testsuites) {
+      const s = parsed.testsuites.testsuite;
+      if (Array.isArray(s)) suites.push(...s);
+      else if (s) suites.push(s);
     }
-
-    tests.push({ name, classname, duration, status, message: message.substring(0, 500) });
+    if (parsed.testsuite) {
+      suites.push(parsed.testsuite);
+    }
+    for (const suite of suites) {
+      const cases = suite.testcase;
+      if (!cases) continue;
+      const caseArr = Array.isArray(cases) ? cases : [cases];
+      for (const tc of caseArr) {
+        const name = tc['@_name'] || 'unknown';
+        const classname = tc['@_classname'] || '';
+        const duration = parseFloat(tc['@_time'] || '0');
+        let status = 'passed';
+        let message = '';
+        if (tc.failure) {
+          status = 'failed';
+          message = (tc.failure['@_message'] || tc.failure['#text'] || '').substring(0, 500);
+        } else if (tc.error) {
+          status = 'error';
+          message = (tc.error['@_message'] || tc.error['#text'] || '').substring(0, 500);
+        } else if (tc.skipped !== undefined) {
+          status = 'skipped';
+        }
+        tests.push({ name, classname, duration, status, message });
+      }
+    }
+  } catch (err) {
+    core.warning(`XML parse error: ${err.message}`);
   }
-
   return tests;
 }
 
@@ -218,19 +229,13 @@ async function run() {
 
     core.info(`✅ API Response received`);
 
-    // Fetch dashboard data
-    let dashboardData = null;
-    try {
-      const dashRes = await httpRequest(`${apiUrl}/api/dashboard?repo_name=${encodeURIComponent(repoName)}`, {
-        headers: { 'X-Falsky-API-Key': apiKey },
-        timeout: 15000,
-      });
-      if (dashRes.status === 200) dashboardData = dashRes.data;
-    } catch {}
-
-    const avgTrust = dashboardData?.avg_trust ?? result.data?.avg_trust ?? 0;
-    const flakyCount = dashboardData?.flaky_count ?? result.data?.flaky_count ?? 0;
-    const totalTests = dashboardData?.total_tests ?? allTests.length;
+    // Use response from /api/runs directly (no second fetch needed)
+    const runData = result.data || {};
+    const avgTrust = runData.avg_trust_score ?? 0;
+    const totalTests = runData.total ?? allTests.length;
+    const passed = runData.passed ?? 0;
+    const failed = runData.failed ?? 0;
+    const flakyCount = (runData.tests || []).filter(t => (t.trust_score || 100) < 50).length;
     const reportUrl = `${apiUrl}/dashboard/?repo=${encodeURIComponent(repoName)}`;
 
     core.setOutput('trust-score', avgTrust.toString());
@@ -258,8 +263,8 @@ async function run() {
           total_tests: totalTests,
           avg_trust: avgTrust,
           flaky_count: flakyCount,
-          quarantined: dashboardData?.quarantined_count || 0,
-          tests: dashboardData?.tests || [],
+          quarantined: 0,
+          tests: runData.tests || [],
           run_id: runId,
         });
 
