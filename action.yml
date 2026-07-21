@@ -14,7 +14,7 @@ inputs:
   api-url:
     description: 'Falsky API base URL'
     required: true
-    default: 'https://falsky-core.vercel.app'
+    default: 'https://poly-core.vercel.app'
 
   api-key:
     description: 'Falsky API key for authentication'
